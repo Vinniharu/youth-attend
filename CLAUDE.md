@@ -6,7 +6,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 ## Current status
 
-- **Phase 0 (scaffold & infrastructure): done.** `docker compose up` serves the app; `/api/health` reports DB + PostGIS.
+- **Phase 0 (scaffold & infrastructure): done** (commit `3aea416`). Dev-mode health check verified; the full `docker compose up --build` check was not completed (build stopped for low host memory). Re-run it before relying on the Docker image.
 - **Next: Phase 1 (database layer):** Drizzle schema with a `geography` custom type, migrations (incl. `postgis`/`citext` extensions), seed script, `lib/geo.ts` + boundary tests, migration entrypoint in the Dockerfile.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
