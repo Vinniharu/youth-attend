@@ -1,0 +1,10 @@
+.next
+out
+build
+coverage
+playwright-report
+test-results
+node_modules
+package-lock.json
+src/db/migrations
+next-env.d.ts

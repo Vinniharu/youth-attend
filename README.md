@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Youth Attendance PWA
 
-## Getting Started
+Records Sunday youth service attendance using server-verified geofencing (PostGIS), with a rotating QR fallback, automated absence emails, and a pastoral follow-up dashboard.
 
-First, run the development server:
+**Stack:** Next.js 16 · React 19 · Tailwind v4 + shadcn/ui · PostgreSQL 18 + PostGIS 3.6 · Drizzle · Better Auth (email OTP) · Serwist · Docker.
+
+See [`CLAUDE.md`](./CLAUDE.md) for the full design, schema, API and build roadmap.
+
+## Getting started
+
+Prerequisites: Docker with Compose v2, Node.js 22 LTS.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
+# Fill in the secrets (openssl rand -base64 32); DB_PASSWORD must be URL-safe
+# (openssl rand -hex 24) and match the password inside DATABASE_URL.
+# If ports 5432/3000 are taken, set DB_PORT / APP_PORT (and update DATABASE_URL).
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Development (recommended): database in Docker, app on host**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+docker compose up -d db
+npm install
+npm run dev            # http://localhost:3000
+curl localhost:3000/api/health   # {"db":"ok","postgis":"3.6.x"}
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Full stack in Docker**
 
-## Learn More
+```bash
+docker compose up --build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Script                    | Purpose                                        |
+| ------------------------- | ---------------------------------------------- |
+| `dev`                     | Next.js dev server (Turbopack)                 |
+| `build` / `start`         | Production build / start                       |
+| `lint` / `lint:fix`       | ESLint                                         |
+| `format` / `format:check` | Prettier                                       |
+| `typecheck`               | Route type generation + `tsc --noEmit`         |
+| `test` / `test:watch`     | Vitest unit tests                              |
+| `test:integration`        | Vitest integration tests (needs the Docker DB) |
+| `test:e2e`                | Playwright                                     |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+A Husky pre-commit hook runs ESLint and Prettier on staged files.
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Private. All rights reserved.

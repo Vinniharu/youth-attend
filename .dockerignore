@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.husky
+.env*
+!.env.example
+tests
+coverage
+playwright-report
+test-results
+plan.md
+Dockerfile
+docker-compose*.yml
+*.md
