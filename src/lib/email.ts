@@ -45,8 +45,9 @@ function getSender(): EmailAddress {
 }
 
 /**
- * Fails fast on email misconfiguration in production (called when auth starts), so a
- * missing key or bad sender is a startup error instead of silently undelivered codes.
+ * Throws on email misconfiguration in production. Called before a sign-in code is
+ * issued, so a missing key or bad sender fails the request instead of silently
+ * sending nothing. Signed-in users and every other page keep working.
  */
 export function assertEmailConfig(): void {
   if (process.env.NODE_ENV !== "production") return;

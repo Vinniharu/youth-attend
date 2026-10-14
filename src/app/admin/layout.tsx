@@ -5,9 +5,10 @@ import { Logo } from "@/components/brand/logo";
 import { Badge } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/dal";
 
-// Admin pages block on the role check (a quick session lookup) instead of streaming,
-// so a member gets a real 307 to "/" and never receives any admin markup.
-// Each admin page and admin API route still checks the role itself.
+// Admin pages block on the role check (a quick session lookup) before any admin
+// markup renders, so a member receives none of it, only a redirect to "/" (a 307 in
+// dev; in production the static root shell has already flushed, so it arrives as a
+// 200 page carrying the redirect). Each admin page and API route still checks itself.
 export const instant = false;
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {

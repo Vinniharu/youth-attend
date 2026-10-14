@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
@@ -57,7 +57,6 @@ async function sendLoginCode(email: string, otp: string): Promise<void> {
 }
 
 function createAuth() {
-  assertEmailConfig();
   return betterAuth({
     appName: "Pulse",
     baseURL: process.env.BETTER_AUTH_URL,
@@ -83,6 +82,20 @@ function createAuth() {
     session: {
       expiresIn: SESSION_DAYS * DAY,
       updateAge: DAY, // sliding: refreshed at most once a day while in use
+    },
+    hooks: {
+      // In production Better Auth runs the send hook in the background, so a throw
+      // there can't fail the request. Check email config up front instead: the member
+      // sees "couldn't send a code" rather than waiting for one that never comes.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/email-otp/send-verification-otp") return;
+        try {
+          assertEmailConfig();
+        } catch (error) {
+          console.error("[auth] email is not configured", error);
+          throw new APIError("INTERNAL_SERVER_ERROR", { message: "Email is unavailable" });
+        }
+      }),
     },
     databaseHooks: {
       session: {

@@ -38,7 +38,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
   - pages: `requireUser()` / `requireAdmin()` (redirects), called inside a `<Suspense>` boundary (Cache Components);
   - route handlers: `const auth = await authorizeApi("admin"); if (!auth.ok) return auth.response;` (401/403 JSON).
   - `src/proxy.ts` is only an optimistic cookie check for pages; it never sees roles. A layout check alone is not protection.
-  - `src/app/admin/layout.tsx` sets `export const instant = false` and awaits `requireAdmin()` outside Suspense, so members get a real 307 and no admin markup (a redirect inside Suspense streams a 200 and trips Next's dev instant-validation). Admin pages still call `requireAdmin()` themselves.
+  - `src/app/admin/layout.tsx` sets `export const instant = false` and awaits `requireAdmin()` outside Suspense, so members receive no admin markup, just the redirect (a 307 in dev; in production a 200 page carrying it, since the root static shell has already flushed). A redirect inside Suspense also trips Next's dev instant-validation. Admin pages still call `requireAdmin()` themselves.
 - Email OTP: `disableSignUp` (admins add members; unknown emails get a silent success), 6 digits, 10 minutes, 5 attempts, stored hashed. In development the code is printed to the server console (`[auth] sign-in code for …`); never in production.
 - `role` and `isActive` are Better Auth `additionalFields` with `input: false`, so `/update-user` can't change them. Inactive users get no code and can't create a session (`databaseHooks.session.create.before`); existing sessions stop working because the DAL checks `isActive` on every request (cookie cache is off on purpose).
 - Auth tables (`session`, `account`, `verification`) are hand-written in `schema.ts` to match Better Auth 1.7 (the CLI isn't installed). TS keys must stay Better Auth's field names. `verification.id` is `text`: Better Auth writes non-UUID ids there.
@@ -51,7 +51,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Without `BREVO_API_KEY`: skipped in development, an error in production. Integration tests force it empty.
 - Templates live in `src/emails/` (react-email v6: `render` + `toPlainText`; send HTML and text).
 - Exception to the no-raw-hex rule: email clients ignore CSS variables, so templates inline Pulse hex values. Keep them in sync with `globals.css`.
-- Production refuses to start auth without `BREVO_API_KEY` and a valid `EMAIL_FROM` (`assertEmailConfig()`), so the Docker stack (NODE_ENV=production) needs both before anyone can sign in.
+- In production, requesting a sign-in code fails (500, logged) without `BREVO_API_KEY` and a valid `EMAIL_FROM` (`assertEmailConfig()`); existing sessions keep working. The Docker stack runs NODE_ENV=production, so it needs both before anyone new can sign in.
 - Sliding sessions: the DAL reads sessions with `disableRefresh` (Server Components can't set cookies); `<SessionKeepAlive />` in the root layout refreshes DB expiry and cookie together via `/api/auth/get-session`.
 - Phase 7 batching: use Brevo `messageVersions` (≤ 99 recipients per version, ≤ 2000 per request) or one request per member. `notifications_log.provider_message_id` stores Brevo's `messageId`.
 
