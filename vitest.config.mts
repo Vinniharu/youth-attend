@@ -9,7 +9,11 @@ loadEnv({ quiet: true });
 
 export default defineConfig({
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // `server-only` throws outside Next's react-server build; tests run in plain Node.
+      "server-only": fileURLToPath(new URL("./tests/server-only-stub.ts", import.meta.url)),
+    },
   },
   test: {
     environment: "node",
@@ -23,7 +27,8 @@ export default defineConfig({
           // Needs the Docker database: `docker compose up -d db`.
           globalSetup: ["tests/integration/global-setup.ts"],
           // A separate *_test database so tests never touch dev data.
-          env: { DATABASE_URL: testDatabaseUrl() },
+          // No BREVO_API_KEY: tests must never send real email.
+          env: { DATABASE_URL: testDatabaseUrl(), BREVO_API_KEY: "" },
           // Test files share one database; run them one at a time.
           fileParallelism: false,
         },

@@ -16,7 +16,7 @@ export async function truncateAll() {
   }
   await db.execute(sql`
     TRUNCATE follow_ups, notifications_log, excusals, attendance_logs,
-             service_sessions, church_locations, users
+             service_sessions, church_locations, verification, users
     RESTART IDENTITY CASCADE
   `);
 }

@@ -91,14 +91,14 @@ async function main() {
   const summary = await getDb().transaction(async (tx) => {
     await tx.execute(sql`
       TRUNCATE follow_ups, notifications_log, excusals, attendance_logs,
-               service_sessions, church_locations, users
+               service_sessions, church_locations, verification, users
       RESTART IDENTITY CASCADE
     `);
 
     // ---- people
     const admin: NewUser = {
       id: randomUUID(),
-      name: "Youth Pastor",
+      name: "Ada Okoro",
       email: ADMIN_EMAIL,
       emailVerified: true,
       role: "admin",

@@ -150,7 +150,8 @@ export const notificationsLog = pgTable(
       onDelete: "set null",
     }),
     type: notifType("type").notNull(),
-    resendId: text("resend_id"),
+    /** The email provider's message id (Brevo `messageId`). */
+    providerMessageId: text("provider_message_id"),
     /** pending | sent | failed | skipped */
     status: text("status").notNull().default("pending"),
     error: text("error"),
@@ -185,12 +186,80 @@ export const followUps = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------- Better Auth
+// Hand-written to match Better Auth 1.7's core tables (session, account,
+// verification), with UUID ids and snake_case columns. TS keys must stay the
+// Better Auth field names: the Drizzle adapter maps fields by key.
+
+export const session = pgTable(
+  "session",
+  {
+    id: uuid("id").primaryKey(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("session_user_id_idx").on(t.userId)],
+);
+
+export const account = pgTable(
+  "account",
+  {
+    id: uuid("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamptz("access_token_expires_at"),
+    refreshTokenExpiresAt: timestamptz("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("account_user_id_idx").on(t.userId)],
+);
+
+export const verification = pgTable(
+  "verification",
+  {
+    // text, not uuid: Better Auth writes its own non-UUID ids here (lock rows).
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
 // ---------------------------------------------------------------- relations
 
 export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
   attendance: many(attendanceLogs, { relationName: "attendee" }),
   excusals: many(excusals, { relationName: "excused" }),
   followUps: many(followUps, { relationName: "subject" }),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(users, { fields: [session.userId], references: [users.id] }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(users, { fields: [account.userId], references: [users.id] }),
 }));
 
 export const serviceSessionsRelations = relations(serviceSessions, ({ many }) => ({

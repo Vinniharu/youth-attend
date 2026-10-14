@@ -8,7 +8,9 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 - **Phase 0 (scaffold & infrastructure): done.** Full `docker compose up --build` verified (db → migrate → app, health ok).
 - **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
-- **Next: Phase 2 (auth & roles):** Better Auth + email OTP. Generate its `session`/`account`/`verification` tables with the Better Auth CLI against the existing `users` table (snake_case columns, UUID ids).
+- **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, Brevo email.
+- **Next: Phase 3 (admin geofence & sessions).**
+- **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
 ## Ground rules
@@ -28,6 +30,30 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - UI: shadcn/ui (Radix base, `radix-nova` style) in `src/components/ui`; `cn()` comes from the `cn` package (via `@/lib/utils`); toasts via `sonner`; theming via `next-themes` (class strategy).
 - Email templates use `react-email` (v6 ships the components and `render`; don't add `@react-email/components`).
 - Formatting: Prettier (with the Tailwind class-sorting plugin). Linting: ESLint flat config (`eslint-config-next` + `eslint-config-prettier`). A Husky pre-commit hook runs lint-staged.
+
+## Auth
+
+- Config: `src/lib/auth.ts` (`getAuth()`, lazy). Browser client: `src/lib/auth-client.ts`. Handler: `src/app/api/auth/[...all]/route.ts`.
+- **Every page and route handler checks auth itself** via the DAL in `src/lib/dal.ts`:
+  - pages: `requireUser()` / `requireAdmin()` (redirects), called inside a `<Suspense>` boundary (Cache Components);
+  - route handlers: `const auth = await authorizeApi("admin"); if (!auth.ok) return auth.response;` (401/403 JSON).
+  - `src/proxy.ts` is only an optimistic cookie check for pages; it never sees roles. A layout check alone is not protection.
+  - `src/app/admin/layout.tsx` sets `export const instant = false` and awaits `requireAdmin()` outside Suspense, so members get a real 307 and no admin markup (a redirect inside Suspense streams a 200 and trips Next's dev instant-validation). Admin pages still call `requireAdmin()` themselves.
+- Email OTP: `disableSignUp` (admins add members; unknown emails get a silent success), 6 digits, 10 minutes, 5 attempts, stored hashed. In development the code is printed to the server console (`[auth] sign-in code for …`); never in production.
+- `role` and `isActive` are Better Auth `additionalFields` with `input: false`, so `/update-user` can't change them. Inactive users get no code and can't create a session (`databaseHooks.session.create.before`); existing sessions stop working because the DAL checks `isActive` on every request (cookie cache is off on purpose).
+- Auth tables (`session`, `account`, `verification`) are hand-written in `schema.ts` to match Better Auth 1.7 (the CLI isn't installed). TS keys must stay Better Auth's field names. `verification.id` is `text`: Better Auth writes non-UUID ids there.
+- `BETTER_AUTH_URL` must match the origin the browser uses; extra origins (Docker on `APP_PORT`, Playwright) go in `BETTER_AUTH_TRUSTED_ORIGINS`.
+- Post-login redirects go through `safeRedirectPath()` (`src/lib/safe-redirect.ts`).
+
+## Email (Brevo)
+
+- `src/lib/email.ts`: `sendEmail()` posts to Brevo's `POST /v3/smtp/email` with plain `fetch` (no SDK). Sender comes from `EMAIL_FROM` (must be a verified Brevo sender).
+- Without `BREVO_API_KEY`: skipped in development, an error in production. Integration tests force it empty.
+- Templates live in `src/emails/` (react-email v6: `render` + `toPlainText`; send HTML and text).
+- Exception to the no-raw-hex rule: email clients ignore CSS variables, so templates inline Pulse hex values. Keep them in sync with `globals.css`.
+- Production refuses to start auth without `BREVO_API_KEY` and a valid `EMAIL_FROM` (`assertEmailConfig()`), so the Docker stack (NODE_ENV=production) needs both before anyone can sign in.
+- Sliding sessions: the DAL reads sessions with `disableRefresh` (Server Components can't set cookies); `<SessionKeepAlive />` in the root layout refreshes DB expiry and cookie together via `/api/auth/get-session`.
+- Phase 7 batching: use Brevo `messageVersions` (≤ 99 recipients per version, ≤ 2000 per request) or one request per member. `notifications_log.provider_message_id` stores Brevo's `messageId`.
 
 ## Database
 
@@ -103,7 +129,7 @@ Email and scheduler scripts (`email:dev`, `scheduler`) are added in the phases t
 
 - Docker and Docker Compose v2
 - Node.js 22 LTS and npm (for running the app outside Docker in development)
-- A Resend account with an API key (a verified domain is needed for production)
+- A Brevo account with an API key (a verified sender/domain is needed for production)
 
 ### 1. Clone and configure
 
@@ -142,7 +168,7 @@ Migrations run automatically when the app container starts.
 
 ### 3. Log in
 
-The seed creates an admin with the email set in `SEED_ADMIN_EMAIL`. Request a code on `/login`. In development, OTP codes are also printed to the server console, so you don't need Resend set up to log in locally.
+The seed creates an admin with the email set in `SEED_ADMIN_EMAIL`. Request a code on `/login`. In development, OTP codes are also printed to the server console, so you don't need Brevo set up to log in locally.
 
 ### npm scripts
 
@@ -177,8 +203,8 @@ BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
 SEED_ADMIN_EMAIL=you@example.com
 
-# Email (Resend)
-RESEND_API_KEY=
+# Email (Brevo)
+BREVO_API_KEY=
 EMAIL_FROM="Youth Church <noreply@yourdomain.org>"
 ADMIN_ALERT_EMAILS=pastor@yourdomain.org,youthlead@yourdomain.org
 
@@ -259,7 +285,7 @@ youth-attendance/
 │   │   ├── geo.ts                 # PostGIS helpers
 │   │   ├── qr-token.ts            # rotating HMAC tokens
 │   │   ├── absences.ts            # absence engine
-│   │   ├── email.ts               # Resend wrapper + batching
+│   │   ├── email.ts               # Brevo wrapper + batching
 │   │   ├── rate-limit.ts
 │   │   └── time.ts                # timezone helpers
 │   ├── emails/
@@ -362,7 +388,7 @@ CREATE TABLE notifications_log (
   user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   session_id  uuid REFERENCES service_sessions(id) ON DELETE SET NULL,
   type        notif_type NOT NULL,
-  resend_id   text,
+  provider_message_id text,   -- Brevo messageId
   status      text NOT NULL DEFAULT 'pending',   -- pending | sent | failed | skipped
   error       text,
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -463,7 +489,7 @@ Inside **one transaction**, for each active member whose `joined_at` is before t
 
 Then set `absences_processed_at = now()` and `status = 'processed'`.
 
-**After commit**, send queued emails using Resend's batch endpoint (up to 100 per request) and record `resend_id`, `status`, and `error` in `notifications_log`. The unique constraint on `(user_id, session_id, type)` guarantees no duplicate emails, even if the job is retried.
+**After commit**, send queued emails through Brevo (`messageVersions` batches: ≤ 99 recipients per version, ≤ 2000 per request) and record `provider_message_id`, `status`, and `error` in `notifications_log`. The unique constraint on `(user_id, session_id, type)` guarantees no duplicate emails, even if the job is retried.
 
 **Cancelled sessions** are skipped entirely.
 
@@ -564,10 +590,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 2: Auth & roles
 
-- [ ] Better Auth + email-OTP plugin + Drizzle adapter; user model mapped to `users`, UUID IDs
-- [ ] Login page (email → code); dev console fallback for codes
-- [ ] `proxy.ts` route protection plus server-side role checks in every admin route
-- [ ] Long-lived sessions (e.g. 60 days, sliding)
+- [x] Better Auth + email-OTP plugin + Drizzle adapter; user model mapped to `users`, UUID IDs
+- [x] Login page (email → code); dev console fallback for codes
+- [x] `proxy.ts` route protection plus server-side role checks in every admin route
+- [x] Long-lived sessions (e.g. 60 days, sliding)
 
 **Done when:** Members can't reach `/admin`; APIs return 401/403 correctly.
 
@@ -606,10 +632,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 - [ ] Cron routes + scheduler service
 - [ ] `lib/absences.ts` per the spec, with tests for every branch and for idempotency
-- [ ] React Email templates, Resend batch sending, `notifications_log`
+- [ ] React Email templates, Brevo batch sending, `notifications_log`
 - [ ] Signed unsubscribe link and settings page
 
-**Done when:** Running the job twice sends no duplicates; emails render correctly in Resend.
+**Done when:** Running the job twice sends no duplicates; emails render correctly in Brevo.
 
 ### Phase 8: Admin dashboard
 
@@ -623,7 +649,7 @@ Each phase ends with a **done-when** check. Commit after every phase.
 ### Phase 9: Hardening & production
 
 - [ ] Rate limiting, security headers, location purge job
-- [ ] Backups, Caddy HTTPS, Resend domain verification, error logging
+- [ ] Backups, Caddy HTTPS, Brevo domain verification (SPF, DKIM, DMARC), error logging
 - [ ] Full E2E run and on-site dry run
 
 **Done when:** Deployed over HTTPS on your domain, a backup restores successfully, and a real Sunday dry run succeeds.
@@ -632,7 +658,7 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ## Open Decisions
 
-Defaults are shown; change them before Phase 2.
+Defaults are shown. They were accepted when Phase 2 started (the user said to continue), so admins add members and sign-up is off.
 
 | Decision         | Default                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------- |

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 
+import { SessionKeepAlive } from "@/components/auth/session-keep-alive";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
           <Toaster />
+          <SessionKeepAlive />
         </ThemeProvider>
       </body>
     </html>

@@ -22,6 +22,20 @@
       "when": 1791980481883,
       "tag": "0002_notifications_nulls_not_distinct",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792003564931,
+      "tag": "0003_auth_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792003569459,
+      "tag": "0004_rename_provider_message_id",
+      "breakpoints": true
     }
   ]
 }

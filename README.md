@@ -28,6 +28,8 @@ npm run dev            # http://localhost:3000
 curl localhost:3000/api/health   # {"db":"ok","postgis":"3.6.x"}
 ```
 
+**Signing in:** open `/login` and enter `SEED_ADMIN_EMAIL` (or any seeded member, e.g. `tobi.adeyemi@example.com`). Without `BREVO_API_KEY`, the 6-digit code is printed in the dev server console instead of emailed. With a key, emails go out through Brevo from `EMAIL_FROM`, which must be a verified sender in your Brevo account.
+
 Design reference: `http://localhost:3000/styleguide` (dev only).
 
 **Full stack in Docker** (migrations run automatically in a one-shot `migrate` service)
