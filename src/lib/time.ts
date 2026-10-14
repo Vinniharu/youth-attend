@@ -71,3 +71,20 @@ export function recentSundays(count: number, timeZone: string, now = new Date())
   const lastSunday = addDays(today, weekday === 0 ? -7 : -weekday);
   return Array.from({ length: count }, (_, i) => addDays(lastSunday, -7 * (count - 1 - i)));
 }
+
+/** Today's date in `timeZone` if it is a Sunday, otherwise the next Sunday. */
+export function upcomingSunday(timeZone: string, now = new Date()): string {
+  const today = zonedDate(now, timeZone);
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay(); // 0 = Sunday
+  return addDays(today, weekday === 0 ? 0 : 7 - weekday);
+}
+
+/** Wall-clock "HH:mm" of `instant` in `timeZone`. */
+export function zonedTime(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+}

@@ -9,7 +9,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 0 (scaffold & infrastructure): done.** Full `docker compose up --build` verified (db → migrate → app, health ok).
 - **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
 - **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, Brevo email.
-- **Next: Phase 3 (admin geofence & sessions).**
+- **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
+- **Next: Phase 4 (geofence check-in).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -44,6 +45,18 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Auth tables (`session`, `account`, `verification`) are hand-written in `schema.ts` to match Better Auth 1.7 (the CLI isn't installed). TS keys must stay Better Auth's field names. `verification.id` is `text`: Better Auth writes non-UUID ids there.
 - `BETTER_AUTH_URL` must match the origin the browser uses; extra origins (Docker on `APP_PORT`, Playwright) go in `BETTER_AUTH_TRUSTED_ORIGINS`.
 - Post-login redirects go through `safeRedirectPath()` (`src/lib/safe-redirect.ts`).
+
+## Geofence & sessions
+
+- Server logic lives in `src/lib/location.ts` (`getDefaultLocation`, `saveDefaultLocation`: one atomic upsert on the `one_default_location` index) and `src/lib/sessions.ts` (`createSession`, `listSessions`, `updateSession`). Route handlers stay thin: `authorizeApi("admin")`, `parseBody(request, schema)` and `apiError` from `src/lib/api.ts`.
+- Input schemas are client-safe in `src/lib/schemas.ts` (also home of `pointSchema`); forms and routes share them. Browser calls go through `sendJson()` in `src/lib/api-client.ts`, which maps error codes to user-facing messages.
+- A session copies the default location's centre and radius when created; later geofence edits never touch existing sessions. Windows are entered as church-local `HH:mm` and converted with `zonedDateTimeToUtc` on the session's own date.
+- Admin status changes: scheduled → open | cancelled; open → closed | cancelled; closed → open | cancelled; cancelled → scheduled ("Restore"; the date is unique, so an accidental cancel must be recoverable). Only `processed` (set by the absence engine) is final (`LOCKED`). `SessionSummary` never includes `qrSecret`.
+- `listSessions(today)` returns `{ upcoming, past }`: all upcoming sessions (so the next free Sunday is always right) and the latest 26 past ones. Counts are correlated subqueries; the outer `"service_sessions"."id"` is written out because Drizzle would render a bare `id` that binds to the inner table.
+- Env defaults (`APP_TIMEZONE`, `DEFAULT_SERVICE_START`/`END`) live only in `src/lib/config.ts` (`appTimeZone()`, `defaultServiceWindow()`).
+- Map: `GeofencePicker` loads `geofence-map.tsx` via `next/dynamic` with `ssr: false`. The marker is a `divIcon` (no broken default PNGs); circle colours come from `.geofence-circle` in `globals.css` (SVG attributes can't read CSS variables). Dark mode inverts OSM tiles.
+- Nominatim: search on submit only (its policy forbids as-you-type autocomplete), throttled to 1 request/second, with attribution.
+- Pages under `/admin` still wrap data reads in `<Suspense>`; the layout's `instant = false` doesn't exempt them from Next's dev check.
 
 ## Email (Brevo)
 
@@ -599,8 +612,8 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 3: Admin geofence & sessions
 
-- [ ] `GeofencePicker` (client-only, Leaflet marker icon fix, draggable marker, radius slider 20–500 m, live circle, "use my location", Nominatim search with debounce and attribution)
-- [ ] Session list, create, cancel, edit window
+- [x] `GeofencePicker` (client-only, Leaflet marker icon fix, draggable marker, radius slider 20–500 m, live circle, "use my location", Nominatim search with debounce and attribution)
+- [x] Session list, create, cancel, edit window
 
 **Done when:** The geofence saves and reloads; new sessions copy it.
 

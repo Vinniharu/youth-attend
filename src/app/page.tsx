@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
+import { appTimeZone, defaultServiceWindow } from "@/lib/config";
 import { requireUser } from "@/lib/dal";
 import { firstName, greeting } from "@/lib/greeting";
 
@@ -71,8 +72,8 @@ export default function HomePage() {
 
 async function Welcome() {
   const user = await requireUser();
-  const timeZone = process.env.APP_TIMEZONE ?? "Africa/Lagos";
-  const start = process.env.DEFAULT_SERVICE_START ?? "08:00";
+  const timeZone = appTimeZone();
+  const { start } = defaultServiceWindow();
 
   return (
     <section className="space-y-8">

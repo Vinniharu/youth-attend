@@ -20,6 +20,7 @@ import {
   users,
   type NewUser,
 } from "@/db/schema";
+import { appTimeZone, defaultServiceWindow } from "@/lib/config";
 import { destinationPoint, type LatLng } from "@/lib/geo";
 import { addDays, recentSundays, zonedDateTimeToUtc } from "@/lib/time";
 
@@ -27,9 +28,8 @@ import { assertLocalDatabase } from "./guard";
 
 assertLocalDatabase("seed");
 
-const TZ = process.env.APP_TIMEZONE ?? "Africa/Lagos";
-const START = process.env.DEFAULT_SERVICE_START ?? "08:00";
-const END = process.env.DEFAULT_SERVICE_END ?? "11:30";
+const TZ = appTimeZone();
+const { start: START, end: END } = defaultServiceWindow();
 const FLAG_THRESHOLD = Number(process.env.ABSENCE_FLAG_THRESHOLD ?? 3);
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@example.com";
 

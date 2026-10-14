@@ -1,16 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { z } from "zod";
 
 import { type LatLng, pointSql } from "@/db/point";
 
 export { pointSql, type LatLng };
 
-/** Validated coordinates. Reused at every API boundary that accepts a location. */
-export const pointSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-});
+// Lives in the client-safe schemas module; re-exported for server callers.
+export { pointSchema } from "@/lib/schemas";
 
 export type OpenSessionMatch = {
   sessionId: string;
