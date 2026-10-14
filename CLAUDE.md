@@ -6,8 +6,9 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 ## Current status
 
-- **Phase 0 (scaffold & infrastructure): done** (commit `3aea416`). Dev-mode health check verified; the full `docker compose up --build` check was not completed (build stopped for low host memory). Re-run it before relying on the Docker image.
-- **Next: Phase 1 (database layer):** Drizzle schema with a `geography` custom type, migrations (incl. `postgis`/`citext` extensions), seed script, `lib/geo.ts` + boundary tests, migration entrypoint in the Dockerfile.
+- **Phase 0 (scaffold & infrastructure): done.** Full `docker compose up --build` verified (db → migrate → app, health ok).
+- **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
+- **Next: Phase 2 (auth & roles):** Better Auth + email OTP. Generate its `session`/`account`/`verification` tables with the Better Auth CLI against the existing `users` table (snake_case columns, UUID ids).
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
 ## Ground rules
@@ -28,22 +29,45 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Email templates use `react-email` (v6 ships the components and `render`; don't add `@react-email/components`).
 - Formatting: Prettier (with the Tailwind class-sorting plugin). Linting: ESLint flat config (`eslint-config-next` + `eslint-config-prettier`). A Husky pre-commit hook runs lint-staged.
 
+## Database
+
+- Schema: `src/db/schema.ts` (snake_case columns, camelCase TS fields). Custom types in `src/db/types.ts`: `geographyPoint` (`{ lat, lng }` ↔ `geography(Point, 4326)`) and `citext`.
+- **Longitude-first lives in one place:** `pointSql()` in `src/db/point.ts`. Never write `ST_MakePoint` anywhere else.
+- Migrations live in `src/db/migrations`. `0000_extensions.sql` is hand-written (postgis, citext). drizzle-kit quotes custom types; `npm run db:generate` runs `scripts/fix-migrations.mjs` afterwards to unquote `geography(...)`. To name a migration: `npx drizzle-kit generate --name <name> && node scripts/fix-migrations.mjs`.
+- Docker: migrations run in a one-shot `migrate` compose service (Dockerfile `migrator` stage, no Next build). `app` starts only after it succeeds. This replaces the spec's "entrypoint runs migrations".
+- Integration tests use a separate `<db>_test` database (`tests/integration/test-db-url.mjs`); `truncateAll()` refuses to run on anything else. Never point tests at the dev DB.
+- `db:seed`/`db:reset` only run against local hosts (`scripts/guard.ts`; override with `ALLOW_DESTRUCTIVE_DB_SCRIPTS=1`).
+- The seed (`scripts/seed.ts`) is deterministic and transactional: 1 admin (`SEED_ADMIN_EMAIL`), 20 members, 3 processed Sundays, 1 flagged member with an open follow-up.
+
+## Design system ("Pulse")
+
+- App name **Pulse**. Clean & premium, ocean blue. Tokens in `src/app/globals.css` (light + dark); every text pair meets WCAG AA.
+- Colours: Ocean `#0B6BCB` primary; `success` (emerald) **only** for checked-in states; `warning` (amber) sparingly. Use semantic classes (`bg-primary`, `text-muted-foreground`, `bg-success-soft`), never raw hex in components.
+- Type: Bricolage Grotesque for headings (`font-heading`, applied to h1–h3 automatically), Geist for UI. Add `tabular` to numbers and times.
+- Signature motif: `<PulseLine beats={…} />` (attendance as a heartbeat). It's the one expressive element; keep everything around it quiet.
+- Brand: `<Logo />` / `<PulseMark />` in `src/components/brand`; `<StatusDot />` for live states.
+- Avoid: all-caps eyebrow labels, arrows appended to buttons, decorative gradients, identical card grids. Mobile-first (members use phones); left-aligned layouts.
+- Reference page: `/styleguide` (dev only; 404 in production).
+
 ## Commands
 
-| Command                           | Purpose                                                              |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `npm run dev`                     | Dev server (Turbopack)                                               |
-| `npm run build` / `start`         | Production build / start                                             |
-| `npm run lint` / `lint:fix`       | ESLint (zero warnings allowed)                                       |
-| `npm run format` / `format:check` | Prettier                                                             |
-| `npm run typecheck`               | `next typegen` + `tsc --noEmit`                                      |
-| `npm test` / `test:watch`         | Vitest unit tests (`tests/unit`)                                     |
-| `npm run test:integration`        | Vitest integration tests against the Docker DB (`tests/integration`) |
-| `npm run test:e2e`                | Playwright (`tests/e2e`)                                             |
-| `docker compose up -d db`         | Dev database only (host port `DB_PORT`, loopback-only)               |
-| `docker compose up --build`       | Full stack (host port `APP_PORT`)                                    |
+| Command                             | Purpose                                                              |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `npm run dev`                       | Dev server (Turbopack)                                               |
+| `npm run build` / `start`           | Production build / start                                             |
+| `npm run lint` / `lint:fix`         | ESLint (zero warnings allowed)                                       |
+| `npm run format` / `format:check`   | Prettier                                                             |
+| `npm run typecheck`                 | `next typegen` + `tsc --noEmit`                                      |
+| `npm test` / `test:watch`           | Vitest unit tests (`tests/unit`)                                     |
+| `npm run test:integration`          | Vitest integration tests against the Docker DB (`tests/integration`) |
+| `npm run test:e2e`                  | Playwright (`tests/e2e`)                                             |
+| `npm run db:migrate` / `db:seed`    | Apply migrations / seed demo data                                    |
+| `npm run db:reset`                  | Dev only: drop everything, migrate, seed                             |
+| `npm run db:generate` / `db:studio` | New migration from schema changes / Drizzle Studio                   |
+| `docker compose up -d db`           | Dev database only (host port `DB_PORT`, loopback-only)               |
+| `docker compose up --build`         | Full stack (host port `APP_PORT`)                                    |
 
-DB, email and scheduler scripts (`db:migrate`, `db:seed`, `email:dev`, `scheduler`, …) are added in the phases that create their files.
+Email and scheduler scripts (`email:dev`, `scheduler`) are added in the phases that create their files.
 
 ---
 
@@ -532,9 +556,9 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 1: Database layer
 
-- [ ] Drizzle schema with `geography` custom type; migrations, including extensions
-- [ ] Seed script
-- [ ] `lib/geo.ts` with unit tests
+- [x] Drizzle schema with `geography` custom type; migrations, including extensions
+- [x] Seed script
+- [x] `lib/geo.ts` with unit tests
 
 **Done when:** Fresh migrate + seed works; geofence boundary tests pass.
 

@@ -8,6 +8,16 @@ ENV HUSKY=0
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ---- migrator: one-shot DB migrations (no Next build needed) ----
+FROM node:22-alpine AS migrator
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY scripts/migrate.mjs ./scripts/
+COPY src/db/migrations ./src/db/migrations
+USER node
+CMD ["node", "scripts/migrate.mjs"]
+
 # ---- builder: produce the standalone Next.js server ----
 FROM node:22-alpine AS builder
 WORKDIR /app
@@ -32,5 +42,5 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 EXPOSE 3000
-# Phase 1 adds `node scripts/migrate.mjs &&` before the server starts.
+# Migrations run in the separate `migrate` compose service (migrator stage).
 CMD ["node", "server.js"]

@@ -1,4 +1,4 @@
-# Development stack. Phase 7 adds the scheduler; docker-compose.prod.yml (Phase 9) adds Caddy.
+# Development stack: db → migrate (one-shot) → app. Phase 7 adds the scheduler; docker-compose.prod.yml (Phase 9) adds Caddy.
 services:
   db:
     image: postgis/postgis:18-3.6
@@ -18,8 +18,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot: applies migrations, then exits. The app waits for it to succeed.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgres://church:${DB_PASSWORD}@db:5432/attendance
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   app:
-    build: .
+    build:
+      context: .
+      target: runner
     restart: unless-stopped
     env_file: .env
     environment:
@@ -27,8 +41,8 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000" # override APP_PORT if 3000 is taken
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

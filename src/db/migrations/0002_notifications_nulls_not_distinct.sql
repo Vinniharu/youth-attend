@@ -1,0 +1,2 @@
+ALTER TABLE "notifications_log" DROP CONSTRAINT "notifications_log_user_session_type_key";--> statement-breakpoint
+ALTER TABLE "notifications_log" ADD CONSTRAINT "notifications_log_user_session_type_key" UNIQUE NULLS NOT DISTINCT("user_id","session_id","type");

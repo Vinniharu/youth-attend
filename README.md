@@ -1,4 +1,4 @@
-# Youth Attendance PWA
+# Pulse: youth attendance PWA
 
 Records Sunday youth service attendance using server-verified geofencing (PostGIS), with a rotating QR fallback, automated absence emails, and a pastoral follow-up dashboard.
 
@@ -22,11 +22,15 @@ cp .env.example .env
 ```bash
 docker compose up -d db
 npm install
+npm run db:migrate
+npm run db:seed       # 1 admin, 20 members, 3 past Sundays
 npm run dev            # http://localhost:3000
 curl localhost:3000/api/health   # {"db":"ok","postgis":"3.6.x"}
 ```
 
-**Full stack in Docker**
+Design reference: `http://localhost:3000/styleguide` (dev only).
+
+**Full stack in Docker** (migrations run automatically in a one-shot `migrate` service)
 
 ```bash
 docker compose up --build
@@ -34,16 +38,19 @@ docker compose up --build
 
 ## Scripts
 
-| Script                    | Purpose                                        |
-| ------------------------- | ---------------------------------------------- |
-| `dev`                     | Next.js dev server (Turbopack)                 |
-| `build` / `start`         | Production build / start                       |
-| `lint` / `lint:fix`       | ESLint                                         |
-| `format` / `format:check` | Prettier                                       |
-| `typecheck`               | Route type generation + `tsc --noEmit`         |
-| `test` / `test:watch`     | Vitest unit tests                              |
-| `test:integration`        | Vitest integration tests (needs the Docker DB) |
-| `test:e2e`                | Playwright                                     |
+| Script                      | Purpose                                        |
+| --------------------------- | ---------------------------------------------- |
+| `dev`                       | Next.js dev server (Turbopack)                 |
+| `build` / `start`           | Production build / start                       |
+| `lint` / `lint:fix`         | ESLint                                         |
+| `format` / `format:check`   | Prettier                                       |
+| `typecheck`                 | Route type generation + `tsc --noEmit`         |
+| `test` / `test:watch`       | Vitest unit tests                              |
+| `test:integration`          | Vitest integration tests (needs the Docker DB) |
+| `test:e2e`                  | Playwright                                     |
+| `db:migrate` / `db:seed`    | Apply migrations / seed demo data              |
+| `db:reset`                  | Dev only: drop, migrate and re-seed            |
+| `db:generate` / `db:studio` | New migration / Drizzle Studio                 |
 
 A Husky pre-commit hook runs ESLint and Prettier on staged files.
 

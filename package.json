@@ -15,7 +15,12 @@
     "test:watch": "vitest --project unit",
     "test:e2e": "playwright test",
     "prepare": "husky",
-    "test:integration": "vitest run --project integration --passWithNoTests"
+    "test:integration": "vitest run --project integration --passWithNoTests",
+    "db:generate": "drizzle-kit generate && node scripts/fix-migrations.mjs",
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs",
+    "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:reset": "tsx --env-file=.env scripts/reset.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.7",

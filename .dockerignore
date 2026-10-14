@@ -4,7 +4,6 @@ node_modules
 .husky
 .env*
 !.env.example
-tests
 coverage
 playwright-report
 test-results

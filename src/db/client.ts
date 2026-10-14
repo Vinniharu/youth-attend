@@ -7,7 +7,7 @@ import { Pool } from "pg";
 type Db = NodePgDatabase;
 
 // Stored on globalThis so dev hot reloads reuse one pool instead of leaking new ones.
-const globalForDb = globalThis as unknown as { db?: Db };
+const globalForDb = globalThis as unknown as { db?: Db; pool?: Pool };
 
 /**
  * Returns the shared Drizzle instance, creating the pool on first use. Lazy so
@@ -34,6 +34,15 @@ export function getDb(): Db {
     console.error("[db] idle client error", error);
   });
 
+  globalForDb.pool = pool;
   globalForDb.db = drizzle({ client: pool });
   return globalForDb.db;
+}
+
+/** Closes the shared pool. For scripts and tests; the app never needs it. */
+export async function closeDb(): Promise<void> {
+  const { pool } = globalForDb;
+  globalForDb.db = undefined;
+  globalForDb.pool = undefined;
+  await pool?.end();
 }
