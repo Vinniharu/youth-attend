@@ -46,7 +46,9 @@ export default function ScanPage({ searchParams }: PageProps<"/scan">) {
 }
 
 async function Scan({ searchParams }: Pick<PageProps<"/scan">, "searchParams">) {
-  await requireUser();
+  // allowIncomplete: a brand-new member scanning at church checks in first and adds
+  // their name afterwards (home sends them to /welcome), so the scanned code is kept.
+  await requireUser({ allowIncomplete: true });
   const { t } = await searchParams;
   const token = typeof t === "string" ? extractToken(t) : null;
   return <QrCheckin initialToken={token} timeZone={appTimeZone()} />;

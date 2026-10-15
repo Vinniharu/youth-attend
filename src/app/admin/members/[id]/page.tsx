@@ -48,7 +48,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
           {!member.isActive && <Badge variant="outline">Inactive</Badge>}
           {member.isFlagged && <Badge variant="destructive">Needs a follow-up</Badge>}
         </div>
-        <h1 className="text-4xl font-semibold sm:text-5xl">{member.name}</h1>
+        <h1 className="text-4xl font-semibold sm:text-5xl">{member.name || member.email}</h1>
         <p className="tabular text-muted-foreground">
           Joined {joined}
           {member.role === "member" && `, missed ${member.consecutiveAbsences} in a row`}

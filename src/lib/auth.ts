@@ -15,9 +15,12 @@ import { getDb } from "@/db/client";
 import { account, session, users, verification } from "@/db/schema";
 import { LoginCodeEmail } from "@/emails/login-code";
 import { assertEmailConfig, sendEmail } from "@/lib/email";
+import { createRateLimiter } from "@/lib/rate-limit";
 
 export const OTP_EXPIRES_MINUTES = 10;
-const SESSION_DAYS = 60;
+// "Always signed in": a year, sliding (refreshed at most daily while in use), so any
+// visit within the year extends it. Browsers cap cookie lifetime at 400 days.
+const SESSION_DAYS = 365;
 const DAY = 60 * 60 * 24;
 
 /** Comma-separated extra origins, e.g. the Docker or Playwright port in development. */
@@ -27,18 +30,42 @@ function trustedOrigins(): string[] {
     .filter((origin): origin is string => Boolean(origin));
 }
 
-async function isActiveUser(where: { email: string } | { id: string }): Promise<boolean> {
+async function isActiveUser(id: string): Promise<boolean> {
   const [row] = await getDb()
     .select({ isActive: users.isActive })
     .from(users)
-    .where("email" in where ? eq(users.email, where.email) : eq(users.id, where.id))
+    .where(eq(users.id, id))
     .limit(1);
   return row?.isActive ?? false;
 }
 
+// Anyone can request a code (open sign-up), so cap codes per address: Pulse must not
+// be usable to flood someone's inbox. On globalThis so dev hot reloads keep counts.
+const globalForAuth = globalThis as unknown as {
+  codeLimiter?: ReturnType<typeof createRateLimiter>;
+};
+const codeLimiter = (globalForAuth.codeLimiter ??= createRateLimiter({
+  limit: 5,
+  windowMs: 60 * 60_000,
+}));
+
+/** True unless the email belongs to a deactivated account (unknown emails may sign up). */
+async function mayReceiveCode(email: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ isActive: users.isActive })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return row?.isActive ?? true;
+}
+
 async function sendLoginCode(email: string, otp: string): Promise<void> {
-  // Inactive members get no code, and the response looks the same either way.
-  if (!(await isActiveUser({ email }))) return;
+  // Deactivated members get no code, and the response looks the same either way.
+  if (!(await mayReceiveCode(email))) return;
+  if (!codeLimiter.hit(email.toLowerCase()).ok) {
+    console.warn("[auth] sign-in code limit reached for an address; not sending");
+    return;
+  }
 
   if (process.env.NODE_ENV !== "production") {
     console.info(`[auth] sign-in code for ${email}: ${otp}`);
@@ -102,7 +129,7 @@ function createAuth() {
         create: {
           // Deactivated members can't start a session, even with a valid code.
           before: async (data) => {
-            if (!(await isActiveUser({ id: data.userId }))) {
+            if (!(await isActiveUser(data.userId))) {
               throw new APIError("FORBIDDEN", { message: "Account is inactive" });
             }
           },
@@ -111,8 +138,9 @@ function createAuth() {
     },
     plugins: [
       emailOTP({
-        // Admins add members; an unknown email silently gets no code.
-        disableSignUp: true,
+        // Open sign-up: a verified code for an unknown email creates an active member
+        // (role and isActive are input: false). They then add their name at /welcome.
+        disableSignUp: false,
         otpLength: 6,
         expiresIn: OTP_EXPIRES_MINUTES * 60,
         allowedAttempts: 5,

@@ -385,5 +385,5 @@ sudo certbot delete --cert-name attend.getzylo.site
 
 Do the on-site dry run in [`DEPLOY.md` §10](DEPLOY.md#10-on-site-dry-run-before-the-first-real-sunday):
 install on an iPhone and an Android, check in inside and outside the building, test the
-projected QR code (and that a photo of it stops working), process absences, and restore
+projected QR code (and that a shared photo fails away from church), process absences, and restore
 a backup.

@@ -1,6 +1,6 @@
 # Pulse: youth attendance PWA
 
-Records Sunday youth service attendance using server-verified geofencing (PostGIS), with a rotating QR fallback, automated absence emails, and a pastoral follow-up dashboard.
+Records Sunday youth service attendance using server-verified geofencing (PostGIS), with a QR fallback (one code per service, guarded by the geofence), automated absence emails, and a pastoral follow-up dashboard.
 
 **Stack:** Next.js 16 · React 19 · Tailwind v4 + shadcn/ui · PostgreSQL 18 + PostGIS 3.6 · Drizzle · Better Auth (email OTP) · Serwist · Docker.
 

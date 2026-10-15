@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/lib/dal";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = { title: "Sign in or join" };
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (

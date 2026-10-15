@@ -10,10 +10,7 @@ import { authorizeApi } from "@/lib/dal";
 import { scanUrl } from "@/lib/qr-link";
 import { issueQrToken } from "@/lib/qr-token";
 
-/**
- * The current rotating token for the display page, as the link the QR code encodes.
- * `serverNow` lets the display correct for its own clock when counting down.
- */
+/** The session's fixed check-in code for the display page, as the link it encodes. */
 export async function GET(
   _request: Request,
   ctx: RouteContext<"/api/admin/sessions/[id]/qr-token">,
@@ -36,19 +33,15 @@ export async function GET(
       return apiError("LOCKED", 409);
     }
 
-    const now = new Date();
-    const issued = issueQrToken(id, session.qrSecret, now);
+    const token = issueQrToken(id, session.qrSecret);
     const [checkedIn] = await getDb()
       .select({ n: count() })
       .from(attendanceLogs)
       .where(eq(attendanceLogs.sessionId, id));
     return Response.json(
       {
-        url: scanUrl(appUrl(), issued.token),
-        token: issued.token,
-        expiresAt: issued.expiresAt.toISOString(),
-        windowSeconds: issued.windowSeconds,
-        serverNow: now.toISOString(),
+        url: scanUrl(appUrl(), token),
+        token,
         status: session.status,
         // The display shows a live count; it polls this endpoint anyway.
         checkedIn: checkedIn?.n ?? 0,

@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { MarkPresentList, RemoveExcusalButton } from "@/components/admin/mark-present-list";
 import { ProcessAbsencesButton } from "@/components/admin/process-absences-button";
+import { ResetQrButton } from "@/components/admin/reset-qr-button";
 import { SessionStatus } from "@/components/admin/session-status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,12 +73,17 @@ async function SessionDetail({ params }: Pick<PageProps<"/admin/sessions/[id]">,
         </div>
         {session.status === "closed" && <ProcessAbsencesButton sessionId={id} />}
         {live && (
-          <Button asChild className="h-11 rounded-xl px-4">
-            <Link href={`/admin/sessions/${id}/display`}>
-              <QrCode aria-hidden />
-              Show check-in code
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {(session.status === "scheduled" || session.status === "open") && (
+              <ResetQrButton sessionId={id} />
+            )}
+            <Button asChild className="h-11 rounded-xl px-4">
+              <Link href={`/admin/sessions/${id}/display`}>
+                <QrCode aria-hidden />
+                Show check-in code
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
 

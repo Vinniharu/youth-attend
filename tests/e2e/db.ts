@@ -65,10 +65,10 @@ export async function createMember(
   );
 }
 
-/** The id of the open session resetE2eData created. */
+/** The id of the open session resetE2eData created (today's, not a past one). */
 export async function openSessionId(): Promise<string> {
   const { rows } = await db().query<{ id: string }>(
-    "SELECT id FROM service_sessions WHERE status = 'open' LIMIT 1",
+    "SELECT id FROM service_sessions WHERE status = 'open' AND now() BETWEEN starts_at AND ends_at LIMIT 1",
   );
   return rows[0]!.id;
 }
@@ -112,6 +112,32 @@ export async function createYesterdaysSession(): Promise<string> {
     ],
   );
   return rows[0]!.id;
+}
+
+/** An earlier service (`daysAgo` days back), left open but long finished. */
+export async function createPastSession(daysAgo: number): Promise<string> {
+  const point = `ST_SetSRID(ST_MakePoint(${CHURCH.lng}, ${CHURCH.lat}), 4326)::geography`;
+  const start = Date.now() - daysAgo * 24 * 60 * 60_000;
+  const { rows } = await db().query<{ id: string }>(
+    `INSERT INTO service_sessions (service_date, starts_at, ends_at, center, radius_m, qr_secret, status)
+     VALUES ($1, $2, $3, ${point}, $4, $5, 'open') RETURNING id`,
+    [
+      new Date(start).toISOString().slice(0, 10),
+      new Date(start),
+      new Date(start + 3 * 60 * 60_000),
+      RADIUS_M,
+      randomBytes(32).toString("base64url"),
+    ],
+  );
+  return rows[0]!.id;
+}
+
+export async function userByEmail(email: string) {
+  const { rows } = await db().query<{ name: string; phone: string | null; role: string }>(
+    "SELECT name, phone, role FROM users WHERE email = $1",
+    [email],
+  );
+  return rows[0] ?? null;
 }
 
 /** Gives a member a run of missed Sundays and an earlier join date (test setup). */

@@ -8,7 +8,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 - **Phase 0 (scaffold & infrastructure): done.** Full `docker compose up --build` verified (db → migrate → app, health ok).
 - **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
-- **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, transactional email.
+- **Phase 2 (auth & roles): done.** Better Auth email OTP, sliding sessions, `proxy.ts` + data access layer, login page, transactional email.
 - **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
 - **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
 - **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
@@ -45,7 +45,9 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
   - route handlers: `const auth = await authorizeApi("admin"); if (!auth.ok) return auth.response;` (401/403 JSON).
   - `src/proxy.ts` is only an optimistic cookie check for pages; it never sees roles. A layout check alone is not protection.
   - `src/app/admin/layout.tsx` sets `export const instant = false` and awaits `requireAdmin()` outside Suspense, so members receive no admin markup, just the redirect (a 307 in dev; in production a 200 page carrying it, since the root static shell has already flushed). A redirect inside Suspense also trips Next's dev instant-validation. Admin pages still call `requireAdmin()` themselves.
-- Email OTP: `disableSignUp` (admins add members; unknown emails get a silent success), 6 digits, 10 minutes, 5 attempts, stored hashed. In development the code is printed to the server console (`[auth] sign-in code for …`); never in production.
+- **Open sign-up (user's choice: anyone can join).** `disableSignUp: false`: a verified code for an unknown email creates an active `member` with an empty name and `joined_at` = now. `requireUser()` sends a nameless account to `/welcome` (name + optional phone, `PATCH /api/me/profile`, `profileInput`, `updateOwnProfile` in `src/lib/preferences.ts`); `/welcome` and `/scan` pass `allowIncomplete` (a newcomer scanning at church checks in first). `/settings` edits the same details. Leader-facing lists use `displayName` (`src/db/display-name.ts`: name, else email). Codes are capped at 5 per address per hour (`sendLoginCode`), since anyone can request one; deactivated accounts get none. Admins can still add members and import CSVs.
+- **Sessions: 365 days, sliding** (`SESSION_DAYS`; browsers cap cookies at 400 days), so members stay signed in.
+- Email OTP: 6 digits, 10 minutes, 5 attempts, stored hashed. In development the code is printed to the server console (`[auth] sign-in code for …`); never in production.
 - `role` and `isActive` are Better Auth `additionalFields` with `input: false`, so `/update-user` can't change them. Inactive users get no code and can't create a session (`databaseHooks.session.create.before`); existing sessions stop working because the DAL checks `isActive` on every request (cookie cache is off on purpose).
 - Auth tables (`session`, `account`, `verification`) are hand-written in `schema.ts` to match Better Auth 1.7 (the CLI isn't installed). TS keys must stay Better Auth's field names. `verification.id` is `text`: Better Auth writes non-UUID ids there.
 - `BETTER_AUTH_URL` must match the origin the browser uses; extra origins (Docker on `APP_PORT`, Playwright) go in `BETTER_AUTH_TRUSTED_ORIGINS`.
@@ -92,9 +94,9 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 ## QR fallback
 
-- Tokens: `src/lib/qr-token.ts` (server, HMAC per spec; valid in their window and the next, so a photo dies within ~60 s; non-canonical base64url signatures rejected). Client-safe shape/link helpers in `src/lib/qr-link.ts`.
+- **Fixed code per service (user's choice, replaces the spec's 30 s rotation).** `src/lib/qr-token.ts`: token = `sessionId.base64url(HMAC(qr_secret, sessionId)[0..16])`, non-canonical base64url rejected. Accepted only while its own session is open and in its window; a genuine code for an ended/closed session → `EXPIRED_QR`, a not-yet-open one → `NO_OPEN_SESSION`. A shared photo is stopped by the geofence (the relaxed QR rule below). **Reset code** (`POST /api/admin/sessions/:id/qr-reset`, `resetQrSecret`, scheduled/open only) replaces `qr_secret`, killing every old copy. Client-safe shape/link helpers in `src/lib/qr-link.ts`.
 - The code encodes a link, `APP_URL/scan?t=<token>` (`appUrl()`), so a phone's own camera app opens Pulse at check-in. `/scan` drops `t` from the address bar after reading it.
-- Display: `/admin/sessions/[id]/display` (`QrDisplay`, full-screen overlay) polls `GET /api/admin/sessions/:id/qr-token` every 10 s and right after each window, corrects for clock skew, keeps the screen awake (Wake Lock), shows a live count.
+- Display: `/admin/sessions/[id]/display` (`QrDisplay`, full-screen overlay) polls `GET /api/admin/sessions/:id/qr-token` every 15 s (live count; picks up a reset code), keeps the screen awake (Wake Lock).
 - **QR location rule (user's choice: relaxed):** `checkInWithQr` accepts accuracy up to `QR_MAX_ACCURACY_M` (default 2 × `MAX_ACCURACY_M` = 150 m) and counts the member inside when distance ≤ radius + accuracy. Forwarded codes used far away still fail.
 - One shared rate limiter (`checkinLimiter`, on `globalThis`) for both check-in routes.
 - Manual check-in: `POST /api/admin/attendance` (`recordManualCheckIn`), allowed for scheduled/open/closed sessions only (processed would leave streaks wrong). The session page lists every active member not checked in or excused, including people added on the day.
@@ -195,7 +197,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 **Why Drizzle, not Prisma:** Prisma has no native PostGIS geography support. Drizzle lets typed queries and raw PostGIS SQL live side by side.
 
-**Why the QR code rotates:** A QR code valid all day can be photographed and shared. Each Sunday session still gets a fresh secret (as originally specified), but the displayed token is an HMAC of that secret plus a 30-second time window. Screenshots expire in under a minute.
+**Why the QR code no longer rotates (changed by the user):** The code is fixed for each service (an HMAC of that session's secret) and expires when the service ends. A photo can be shared, but QR check-ins still need the member's location near church, so a forwarded code fails from home. Leaders can "Reset code" if one leaks.
 
 **Why there's a `church_locations` table:** Admins set the geofence once. Each Sunday copies it into its session row, so moving location later doesn't rewrite history.
 
@@ -714,7 +716,7 @@ Each phase ends with a **done-when** check. Commit after every phase.
 - [x] Member scanner page → GPS → `POST /api/checkin/qr`
 - [x] Admin manual check-in
 
-**Done when:** A screenshot of the QR stops working within about 60 s; a valid scan from outside the geofence is rejected.
+**Done when:** A valid scan from outside the geofence is rejected; last week's code has expired; a reset code stops old copies. (Originally: a screenshot stops working within ~60 s; the user replaced rotation with a fixed per-service code.)
 
 ### Phase 7: Absence engine & emails
 
@@ -746,14 +748,14 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ## Open Decisions
 
-Defaults are shown. They were accepted when Phase 2 started (the user said to continue), so admins add members and sign-up is off.
+Defaults are shown. They were accepted when Phase 2 started; the user later opened sign-up.
 
-| Decision         | Default                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| How members join | Admins add members (or CSV import); members then log in with OTP. Open sign-up is disabled. |
-| Service window   | Sundays, 08:00–11:30 local time; one service per Sunday                                     |
-| Flag clearing    | Streak resets automatically on return; follow-up stays open until a leader resolves it      |
-| Members under 18 | Guardian consent required; 90-day coordinate retention                                      |
-| Hosting          | Single VPS + Docker + Caddy; your own domain for the app and email                          |
+| Decision         | Default                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| How members join | Anyone can sign up with an emailed code (then adds name + phone); admins can also add members or import a CSV. |
+| Service window   | Sundays, 08:00–11:30 local time; one service per Sunday                                                        |
+| Flag clearing    | Streak resets automatically on return; follow-up stays open until a leader resolves it                         |
+| Members under 18 | Guardian consent required; 90-day coordinate retention                                                         |
+| Hosting          | Single VPS + Docker + Caddy; your own domain for the app and email                                             |
 
 ---

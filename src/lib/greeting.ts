@@ -8,7 +8,7 @@ export function greeting(now: Date, timeZone: string): string {
   return "Good evening";
 }
 
-/** First word of a display name, for friendly greetings. */
+/** First word of a display name, for friendly greetings ("there" if it has none yet). */
 export function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
+  return name.trim().split(/\s+/)[0] || "there";
 }

@@ -36,7 +36,7 @@ type Props = {
 };
 
 /**
- * QR fallback: scan the rotating code on the church screen (or arrive here from the
+ * QR fallback: scan the code on the church screen (or arrive here from the
  * phone camera via its link), then confirm location and check in.
  */
 export function QrCheckin({ initialToken, timeZone }: Props) {

@@ -133,8 +133,9 @@ export async function checkInWithGeofence(
 }
 
 /**
- * The QR check-in pipeline. The rotating token proves the member is looking at the
- * church screen right now, so the location check is relaxed (the user's choice):
+ * The QR check-in pipeline. The code is fixed for the whole service, so it can be
+ * photographed and shared; the location check is what stops a shared copy. It is
+ * relaxed for QR (the user's choice) because QR is the fallback for weak indoor GPS:
  * accuracy up to `qrMaxAccuracyM()` (default 150 m) and the reading's accuracy
  * counts in the member's favour. A forwarded code used from home still fails,
  * because home is far outside any geofence.
@@ -165,12 +166,19 @@ export async function checkInWithQr(
     .limit(1);
   if (!session) return { ok: false, reason: "INVALID_QR" };
 
-  const verdict = verifyQrToken(parsed, session.qrSecret, now);
-  if (verdict === "invalid") return { ok: false, reason: "INVALID_QR" };
-  if (verdict === "expired") return { ok: false, reason: "EXPIRED_QR" };
+  if (!verifyQrToken(parsed, session.qrSecret)) return { ok: false, reason: "INVALID_QR" };
 
   const open = session.status === "open" && session.startsAt <= now && now <= session.endsAt;
-  if (!open) return { ok: false, reason: "NO_OPEN_SESSION" };
+  if (!open) {
+    // A genuine code whose service is over (last week's photo): it has expired.
+    // One for a service that hasn't started yet: check-in simply isn't open.
+    const ended =
+      session.status === "closed" ||
+      session.status === "processed" ||
+      session.status === "cancelled" ||
+      now > session.endsAt;
+    return { ok: false, reason: ended ? "EXPIRED_QR" : "NO_OPEN_SESSION" };
+  }
 
   const existing = await existingCheckIn(session.id, userId);
   if (existing) return alreadyIn(existing);

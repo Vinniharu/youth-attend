@@ -3,9 +3,8 @@
 // The code holds a link, `<app>/scan?t=<token>`, so a phone's ordinary camera app
 // opens Pulse straight at the check-in step; the in-app scanner reads the same link.
 
-/** `<sessionId>.<window>.<signature>`: UUID, integer, 16 bytes base64url (22 chars). */
-const TOKEN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\d{1,12}\.[A-Za-z0-9_-]{22}$/;
+/** `<sessionId>.<signature>`: UUID and 16 bytes base64url (22 chars). */
+const TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9_-]{22}$/;
 
 export const isTokenShaped = (value: string) => TOKEN.test(value);
 

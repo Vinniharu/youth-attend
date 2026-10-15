@@ -6,9 +6,10 @@ import { Suspense } from "react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Logo } from "@/components/brand/logo";
 import { EmailPreference } from "@/components/member/email-preference";
+import { ProfileForm } from "@/components/member/profile-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/dal";
-import { getEmailNotifications } from "@/lib/preferences";
+import { getEmailNotifications, getProfile } from "@/lib/preferences";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -39,9 +40,20 @@ export default function SettingsPage() {
 
 async function Settings() {
   const user = await requireUser();
-  const emailNotifications = await getEmailNotifications(user.id);
+  const [emailNotifications, profile] = await Promise.all([
+    getEmailNotifications(user.id),
+    getProfile(user.id),
+  ]);
   return (
     <>
+      <section className="space-y-3" aria-labelledby="details">
+        <h2 id="details" className="text-lg font-semibold">
+          Your details
+        </h2>
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <ProfileForm initial={profile} mode="settings" />
+        </div>
+      </section>
       <section className="space-y-3" aria-labelledby="emails">
         <h2 id="emails" className="text-lg font-semibold">
           Emails

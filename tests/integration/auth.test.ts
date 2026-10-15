@@ -45,7 +45,7 @@ afterEach(() => vi.restoreAllMocks());
 afterAll(closeDb);
 
 describe("email OTP sign-in", () => {
-  it("sends an active member a code that signs them in with a 60-day session", async () => {
+  it("sends an active member a code that signs them in with a year-long session", async () => {
     const member = await insertUser({ email: "tobi@example.com" });
     const codes = captureLoggedCodes();
 
@@ -61,8 +61,8 @@ describe("email OTP sign-in", () => {
     expect(current?.user).toMatchObject({ id: member.id, role: "member", isActive: true });
     expect(current!.session.id).toMatch(UUID);
     const days = (current!.session.expiresAt.getTime() - Date.now()) / DAY_MS;
-    expect(days).toBeGreaterThan(59.9);
-    expect(days).toBeLessThanOrEqual(60);
+    expect(days).toBeGreaterThan(364.9);
+    expect(days).toBeLessThanOrEqual(365);
   });
 
   it("marks a seeded (unverified) member verified on first sign-in", async () => {
@@ -96,25 +96,54 @@ describe("email OTP sign-in", () => {
   });
 });
 
-describe("no open sign-up", () => {
-  it("answers success for an unknown email but sends no code and creates nobody", async () => {
+describe("open sign-up", () => {
+  it("sends a code to a new email; the first sign-in creates an active member", async () => {
     const codes = captureLoggedCodes();
     const result = await getAuth().api.sendVerificationOTP({
-      body: { email: "stranger@example.com", type: "sign-in" },
+      body: { email: "New.Person@example.com", type: "sign-in" },
     });
-    await settle();
-
     expect(result).toEqual({ success: true });
-    expect(codes.size).toBe(0);
-    expect(await getDb().select().from(verification)).toHaveLength(0);
-    expect(await getDb().select().from(users)).toHaveLength(0);
+    await vi.waitFor(() => expect(codes.get("new.person@example.com")).toMatch(/^\d{6}$/));
+
+    const before = Date.now();
+    const { cookie, user } = await signIn(
+      "new.person@example.com",
+      codes.get("new.person@example.com"),
+    );
+    const [row] = await getDb().select().from(users).where(eq(users.id, user.id));
+    // No name yet: /welcome asks for it. Counting starts from now (joined_at).
+    expect(row).toMatchObject({ name: "", role: "member", isActive: true, emailVerified: true });
+    expect(row!.joinedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    const current = await getAuth().api.getSession({ headers: new Headers({ cookie }) });
+    expect(current?.user.id).toBe(user.id);
   });
 
-  it("refuses to create an account from a sign-in attempt", async () => {
-    await expect(signIn("stranger@example.com", "123456")).rejects.toMatchObject({
-      body: { code: "INVALID_OTP" },
+  it("can't create an admin or an inactive account at sign-up", async () => {
+    const email = "sneaky@example.com";
+    const code = await issueCode(email);
+    await getAuth()
+      .api.signInEmailOTP({
+        // What an attacker would POST: extra fields alongside the code.
+        body: { email, otp: code, role: "admin", isActive: false } as never,
+      })
+      .catch(() => null);
+    const rows = await getDb().select().from(users).where(eq(users.email, email));
+    for (const row of rows) expect(row).toMatchObject({ role: "member", isActive: true });
+  });
+
+  it("caps codes per address so the form can't flood someone's inbox", async () => {
+    const codes: string[] = [];
+    vi.spyOn(console, "info").mockImplementation((message: unknown) => {
+      if (String(message).includes("flood-target@example.com")) codes.push(String(message));
     });
-    expect(await getDb().select().from(users)).toHaveLength(0);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let i = 0; i < 7; i++) {
+      await getAuth().api.sendVerificationOTP({
+        body: { email: "flood-target@example.com", type: "sign-in" },
+      });
+    }
+    await settle();
+    expect(codes).toHaveLength(5);
   });
 });
 

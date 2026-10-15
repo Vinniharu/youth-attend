@@ -53,7 +53,7 @@ async function MemberList({ searchParams }: Pick<PageProps<"/admin/members">, "s
             <span className="min-w-0">
               <span className="flex items-center gap-2 font-medium">
                 <span className={m.isActive ? "" : "text-muted-foreground line-through"}>
-                  {m.name}
+                  {m.name || m.email}
                 </span>
                 {m.role === "admin" && <Badge variant="secondary">Leader</Badge>}
                 {!m.isActive && <Badge variant="outline">Inactive</Badge>}

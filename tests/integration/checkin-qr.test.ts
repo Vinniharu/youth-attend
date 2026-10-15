@@ -6,6 +6,7 @@ import { attendanceLogs, serviceSessions } from "@/db/schema";
 import { checkInWithQr, recordManualCheckIn } from "@/lib/checkin";
 import { destinationPoint } from "@/lib/geo";
 import { issueQrToken } from "@/lib/qr-token";
+import { resetQrSecret } from "@/lib/sessions";
 
 import { insertSession, insertUser, truncateAll } from "./helpers";
 
@@ -15,9 +16,9 @@ const at = (distanceM: number, accuracy = 20) => ({
   accuracy,
 });
 
-async function openSessionWithToken(now = new Date()) {
+async function openSessionWithToken() {
   const session = await insertSession(CHURCH);
-  return { session, token: issueQrToken(session.id, session.qrSecret, now).token };
+  return { session, token: issueQrToken(session.id, session.qrSecret) };
 }
 
 beforeEach(truncateAll);
@@ -73,25 +74,53 @@ describe("checkInWithQr", () => {
     });
   });
 
-  it("rejects a screenshot after about 60 seconds", async () => {
+  it("keeps the same code working all service (no rotation)", async () => {
+    const { session, token } = await openSessionWithToken();
+    // insertSession's window runs from an hour ago to an hour from now.
+    const late = new Date(session.endsAt.getTime() - 60_000);
+    const [early, later] = [await insertUser(), await insertUser()];
+    expect(await checkInWithQr(early.id, token, at(10), null)).toMatchObject({ ok: true });
+    expect(await checkInWithQr(later.id, token, at(10), null, late)).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("expires the code when its service ends (e.g. last week's photo)", async () => {
     const user = await insertUser();
-    const shownAt = new Date();
-    const { token } = await openSessionWithToken(shownAt);
-    const later = (s: number) => new Date(shownAt.getTime() + s * 1000);
-    // Valid in its window and the next one, dead after two full windows.
-    expect(await checkInWithQr(user.id, token, at(10), null, later(61))).toEqual({
+    const { session, token } = await openSessionWithToken();
+    const afterEnd = new Date(session.endsAt.getTime() + 60_000);
+    expect(await checkInWithQr(user.id, token, at(10), null, afterEnd)).toEqual({
       ok: false,
       reason: "EXPIRED_QR",
     });
-    expect(await checkInWithQr(user.id, token, at(10), null, later(25))).toMatchObject({
-      ok: true,
+  });
+
+  it("'Reset code' stops every old copy at once", async () => {
+    const user = await insertUser();
+    const { session, token } = await openSessionWithToken();
+    await resetQrSecret(session.id);
+    expect(await checkInWithQr(user.id, token, at(10), null)).toEqual({
+      ok: false,
+      reason: "INVALID_QR",
     });
+    const [fresh] = await getDb()
+      .select({ qrSecret: serviceSessions.qrSecret })
+      .from(serviceSessions)
+      .where(eq(serviceSessions.id, session.id));
+    expect(
+      await checkInWithQr(user.id, issueQrToken(session.id, fresh!.qrSecret), at(10), null),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("can't reset the code of a service that has ended", async () => {
+    const closed = await insertSession(CHURCH, { status: "closed" });
+    await expect(resetQrSecret(closed.id)).rejects.toThrow("LOCKED");
   });
 
   it("rejects forged and malformed codes", async () => {
     const user = await insertUser();
     const { session, token } = await openSessionWithToken();
-    const forged = issueQrToken(session.id, "not-the-secret").token;
+    const forged = issueQrToken(session.id, "not-the-secret");
     expect(await checkInWithQr(user.id, forged, at(10), null)).toEqual({
       ok: false,
       reason: "INVALID_QR",
@@ -112,11 +141,20 @@ describe("checkInWithQr", () => {
     const { session, token } = await openSessionWithToken();
     await getDb()
       .update(serviceSessions)
-      .set({ status: "closed" })
+      .set({ status: "scheduled" })
       .where(eq(serviceSessions.id, session.id));
     expect(await checkInWithQr(user.id, token, at(10), null)).toEqual({
       ok: false,
       reason: "NO_OPEN_SESSION",
+    });
+    // Closed by a leader: the service is over, so the code has expired.
+    await getDb()
+      .update(serviceSessions)
+      .set({ status: "closed" })
+      .where(eq(serviceSessions.id, session.id));
+    expect(await checkInWithQr(user.id, token, at(10), null)).toEqual({
+      ok: false,
+      reason: "EXPIRED_QR",
     });
   });
 

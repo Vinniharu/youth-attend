@@ -44,7 +44,7 @@ export type View =
   | { kind: "error" }
   /** QR only: not a Pulse code, or tampered with. */
   | { kind: "invalid-qr" }
-  /** QR only: a genuine code that has rotated away (a photo or screenshot). */
+  /** QR only: a genuine code whose service has ended (e.g. last week's). */
   | { kind: "expired-qr" };
 
 export type Reading = { lat: number; lng: number; accuracy: number };
@@ -370,7 +370,7 @@ export function ViewBody({
       return (
         <>
           <Message tone="warning" icon={<TimerOff />} title="That code has expired">
-            <p>The code on the screen changes every 30 seconds. Scan the one showing now.</p>
+            <p>It&apos;s from a service that has ended. Scan the code on the screen today.</p>
           </Message>
           <Actions onRetry={onRetry} retry={false} secondary={secondary} />
         </>

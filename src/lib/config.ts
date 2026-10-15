@@ -14,9 +14,6 @@ export const defaultServiceWindow = (): { start: string; end: string } => ({
 /** GPS readings less accurate than this (metres) are rejected with LOW_ACCURACY. */
 export const maxAccuracyM = (): number => Number(process.env.MAX_ACCURACY_M) || 75;
 
-/** How long each rotating QR token window lasts, in seconds. */
-export const qrWindowSeconds = (): number => Number(process.env.QR_WINDOW_SECONDS) || 30;
-
 /**
  * QR check-ins accept rougher GPS than automatic ones: the fresh code already shows
  * the member is at the church screen. Defaults to twice MAX_ACCURACY_M.

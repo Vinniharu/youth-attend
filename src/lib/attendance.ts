@@ -3,6 +3,7 @@ import "server-only";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { displayName } from "@/db/display-name";
 import { attendanceLogs, excusals, serviceSessions, users } from "@/db/schema";
 import type { CheckinMethod } from "@/lib/checkin-types";
 
@@ -53,7 +54,7 @@ export async function getSessionAttendance(sessionId: string): Promise<SessionAt
     db
       .select({
         userId: attendanceLogs.userId,
-        name: users.name,
+        name: displayName,
         method: attendanceLogs.method,
         checkedInAt: attendanceLogs.checkedInAt,
         distanceM: attendanceLogs.distanceM,
@@ -64,7 +65,7 @@ export async function getSessionAttendance(sessionId: string): Promise<SessionAt
       .where(eq(attendanceLogs.sessionId, sessionId))
       .orderBy(asc(attendanceLogs.checkedInAt)),
     db
-      .select({ userId: excusals.userId, name: users.name, reason: excusals.reason })
+      .select({ userId: excusals.userId, name: displayName, reason: excusals.reason })
       .from(excusals)
       .innerJoin(users, eq(users.id, excusals.userId))
       .where(eq(excusals.sessionId, sessionId))
@@ -72,7 +73,7 @@ export async function getSessionAttendance(sessionId: string): Promise<SessionAt
     db
       .select({
         userId: users.id,
-        name: users.name,
+        name: displayName,
         email: users.email,
         consecutiveAbsences: users.consecutiveAbsences,
       })

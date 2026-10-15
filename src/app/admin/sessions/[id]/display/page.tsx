@@ -9,7 +9,7 @@ import { requireAdmin } from "@/lib/dal";
 
 export const metadata: Metadata = { title: "Check-in code" };
 
-/** Full-screen rotating QR for the church screen (covers the admin chrome). */
+/** Full-screen check-in code for the church screen (covers the admin chrome). */
 export default function DisplayPage({ params }: PageProps<"/admin/sessions/[id]/display">) {
   return (
     <Suspense fallback={null}>

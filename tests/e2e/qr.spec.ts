@@ -1,17 +1,18 @@
 import { type Browser, devices, expect, type Page, test } from "@playwright/test";
 
-import { attendanceCount, CHURCH, closeE2eDb, openSessionId } from "./db";
+import { attendanceCount, CHURCH, closeE2eDb, createPastSession, openSessionId } from "./db";
 import { signIn } from "./sign-in";
 
-// Phase 6 done-when: a screenshot of the QR stops working within about 60 s, and a
-// valid scan from outside the geofence is rejected. Members arrive the way a phone's
-// camera app brings them: the code is a link to /scan?t=<token>.
+// The check-in code is fixed for the whole service. What stops a shared photo is the
+// geofence: a valid scan from outside it is rejected. Last week's code has expired,
+// and "Reset code" kills every old copy. Members arrive the way a phone's camera app
+// brings them: the code is a link to /scan?t=<token>.
 
 const metresNorth = (m: number) => ({ latitude: CHURCH.lat + m / 111_320, longitude: CHURCH.lng });
 
-async function displayedLink(page: Page): Promise<string> {
+async function displayedLink(page: Page, sessionId?: string): Promise<string> {
   await signIn(page, "leader@example.com", "admin");
-  await page.goto(`/admin/sessions/${await openSessionId()}/display`);
+  await page.goto(`/admin/sessions/${sessionId ?? (await openSessionId())}/display`);
   await expect(page.getByRole("heading", { name: /Scan to check in/ })).toBeVisible();
   const url = await page.locator("[data-qr-url]").getAttribute("data-qr-url");
   expect(url).toMatch(/\/scan\?t=/);
@@ -67,15 +68,38 @@ test("a tampered code is refused", async ({ page, browser }) => {
   await member.context.close();
 });
 
-test("a photo of the code stops working within about 60 seconds", async ({ page, browser }) => {
-  test.setTimeout(150_000);
-  const link = await displayedLink(page);
-  // Two full windows (30 s each) guarantee the photo's window and the next have passed.
-  await page.waitForTimeout(61_000);
-  const member = await scanAs(browser, "qr-photo@example.com", link, 40);
+test("the code stays the same all service", async ({ page }) => {
+  const first = await displayedLink(page);
+  await page.reload();
+  await expect(page.locator("[data-qr-url]")).toHaveAttribute("data-qr-url", first);
+});
+
+test("a code from an earlier service has expired", async ({ page, browser }) => {
+  const link = await displayedLink(page, await createPastSession(7));
+  const member = await scanAs(browser, "qr-lastweek@example.com", link, 40);
   await expect(member.page.getByRole("heading", { name: "That code has expired" })).toBeVisible();
-  expect(await attendanceCount("qr-photo@example.com")).toBe(0);
+  expect(await attendanceCount("qr-lastweek@example.com")).toBe(0);
   await member.context.close();
+});
+
+test("'Reset code' stops old copies of the code", async ({ page, browser }) => {
+  const old = await displayedLink(page);
+  await page.goto(`/admin/sessions/${await openSessionId()}`);
+  await page.getByRole("button", { name: "Reset code" }).click();
+  await page.getByRole("button", { name: "Reset now" }).click();
+  await expect(page.getByText(/New check-in code ready/)).toBeVisible();
+
+  const member = await scanAs(browser, "qr-reset@example.com", old, 40);
+  await expect(member.page.getByRole("heading", { name: "That's not a Pulse code" })).toBeVisible();
+  expect(await attendanceCount("qr-reset@example.com")).toBe(0);
+  await member.context.close();
+
+  // The screen shows the new code, which works.
+  const fresh = await displayedLink(page);
+  expect(fresh).not.toBe(old);
+  const again = await scanAs(browser, "qr-reset@example.com", fresh, 40);
+  await expect(again.page.getByRole("heading", { name: "You're checked in" })).toBeVisible();
+  await again.context.close();
 });
 
 test("a leader can mark a member present", async ({ page, browser }) => {

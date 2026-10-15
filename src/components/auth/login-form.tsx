@@ -85,8 +85,10 @@ export function LoginForm({ next }: { next: string | null }) {
         if (error?.code === "INVALID_OTP") setCode("");
         return;
       }
-      // verifying stays true: we're leaving this page.
-      router.replace(next ?? (data.user.role === "admin" ? "/admin" : "/"));
+      // verifying stays true: we're leaving this page. A brand-new account (no name
+      // yet) goes to /welcome, unless it was heading somewhere like /scan.
+      const home = data.user.role === "admin" ? "/admin" : "/";
+      router.replace(next ?? (data.user.name.trim() === "" ? "/welcome" : home));
       router.refresh();
     });
   };
@@ -101,9 +103,10 @@ export function LoginForm({ next }: { next: string | null }) {
         }}
       >
         <div className="space-y-2">
-          <h1 className="text-3xl font-semibold sm:text-4xl">Sign in</h1>
+          <h1 className="text-3xl font-semibold sm:text-4xl">Sign in or join</h1>
           <p className="text-muted-foreground">
-            Use the email your youth leader added you with. We&apos;ll send you a 6-digit code.
+            Enter your email and we&apos;ll send you a 6-digit code. New here? The same code creates
+            your account.
           </p>
         </div>
 
@@ -175,8 +178,7 @@ export function LoginForm({ next }: { next: string | null }) {
           className="tabular h-14 rounded-xl px-4 text-center font-mono text-2xl tracking-[0.5em]"
         />
         <p id="code-hint" className="text-sm text-muted-foreground">
-          No email after a minute? Check your spam folder, or ask a youth leader to check
-          you&apos;re on the list.
+          No email after a minute? Check your spam folder and that the address is right.
         </p>
       </div>
 

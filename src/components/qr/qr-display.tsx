@@ -9,17 +9,14 @@ import { ChurchMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 
-// Full-screen rotating QR for the church screen. Polls the token every 10 s (and
-// right after each window ends), so the code on screen is always current; a photo
-// of it stops working within about a minute.
+// Full-screen check-in code for the church screen. The code is fixed for the whole
+// service (a shared photo is stopped by the geofence, not by time). It polls every
+// 15 s for the live count, and to pick up a new code if a leader resets it.
 
-const POLL_MS = 10_000;
+const POLL_MS = 15_000;
 
 type TokenResponse = {
   url: string;
-  expiresAt: string;
-  windowSeconds: number;
-  serverNow: string;
   status: "scheduled" | "open" | "closed" | "processed" | "cancelled";
   checkedIn: number;
 };
@@ -30,9 +27,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
   const [data, setData] = useState<TokenResponse | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  // Server clock minus ours, so the countdown matches the server's windows.
-  const [skew, setSkew] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -41,7 +35,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
       });
       if (!response.ok) throw new Error(String(response.status));
       const next = (await response.json()) as TokenResponse;
-      setSkew(new Date(next.serverNow).getTime() - Date.now());
       setData(next);
       setSvg(
         await QRCode.toString(next.url, { type: "svg", errorCorrectionLevel: "M", margin: 1 }),
@@ -52,7 +45,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
     }
   }, [sessionId]);
 
-  // Poll, and refetch as soon as the current window ends.
   useEffect(() => {
     const first = setTimeout(() => void load(), 0);
     const poll = setInterval(() => void load(), POLL_MS);
@@ -61,19 +53,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
       clearInterval(poll);
     };
   }, [load]);
-
-  useEffect(() => {
-    if (!data) return;
-    const msLeft = new Date(data.expiresAt).getTime() - (Date.now() + skew);
-    const rotate = setTimeout(() => void load(), Math.max(0, msLeft) + 250);
-    return () => clearTimeout(rotate);
-  }, [data, skew, load]);
-
-  // Countdown tick.
-  useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(tick);
-  }, []);
 
   // Keep the projector laptop awake while the code is showing.
   useEffect(() => {
@@ -94,10 +73,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
     };
   }, []);
 
-  const secondsLeft = data
-    ? Math.max(0, (new Date(data.expiresAt).getTime() - (now + skew)) / 1000)
-    : 0;
-  const fraction = data ? secondsLeft / data.windowSeconds : 0;
   const open = data?.status === "open";
 
   return (
@@ -137,8 +112,8 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
             check in
           </h1>
           <p className="max-w-md text-xl text-muted-foreground">
-            Location not working? Point your phone&apos;s camera at the code. It changes every{" "}
-            {data?.windowSeconds ?? 30} seconds.
+            Location not working? Point your phone&apos;s camera at the code. It only works here at
+            church.
           </p>
           <p className="tabular text-xl">
             <span className="font-heading text-5xl font-semibold">{data?.checkedIn ?? "—"}</span>{" "}
@@ -159,7 +134,6 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
               <div className="size-[min(70vw,60vh)] animate-pulse rounded-xl bg-muted" />
             )}
           </div>
-          <Countdown fraction={fraction} seconds={Math.ceil(secondsLeft)} />
           {error && (
             <p role="alert" className="text-sm text-destructive">
               Can&apos;t reach Pulse. The code will refresh when the connection is back.
@@ -168,29 +142,5 @@ export function QrDisplay({ sessionId, title, backHref }: Props) {
         </div>
       </main>
     </div>
-  );
-}
-
-function Countdown({ fraction, seconds }: { fraction: number; seconds: number }) {
-  const r = 18;
-  const circumference = 2 * Math.PI * r;
-  return (
-    <span className="flex items-center gap-3 text-muted-foreground">
-      <svg viewBox="0 0 44 44" className="size-11 -rotate-90" aria-hidden>
-        <circle cx="22" cy="22" r={r} fill="none" strokeWidth="4" className="stroke-muted" />
-        <circle
-          cx="22"
-          cy="22"
-          r={r}
-          fill="none"
-          strokeWidth="4"
-          strokeLinecap="round"
-          className="stroke-primary transition-[stroke-dashoffset] duration-200 ease-linear"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
-        />
-      </svg>
-      <span className="tabular text-lg">New code in {seconds}s</span>
-    </span>
   );
 }

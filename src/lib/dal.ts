@@ -16,6 +16,8 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  /** A new self-registered account that hasn't added its name yet (see /welcome). */
+  needsProfile: boolean;
 };
 
 /** The signed-in, active user, or null. Read from the database on every request. */
@@ -32,15 +34,25 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   });
   if (!result || result.user.isActive === false) return null;
   const { id, name, email, role } = result.user;
-  return { id, name, email, role: role === "admin" ? "admin" : "member" };
+  return {
+    id,
+    name,
+    email,
+    role: role === "admin" ? "admin" : "member",
+    needsProfile: name.trim() === "",
+  };
 });
 
 // ---------------------------------------------------------------- pages
 
-/** For pages: the signed-in user, or a redirect to /login. */
-export async function requireUser(): Promise<SessionUser> {
+/**
+ * For pages: the signed-in user, or a redirect to /login. A new account without a
+ * name is sent to /welcome first (which passes `allowIncomplete`).
+ */
+export async function requireUser({ allowIncomplete = false } = {}): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  if (user.needsProfile && !allowIncomplete) redirect("/welcome");
   return user;
 }
 

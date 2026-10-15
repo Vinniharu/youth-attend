@@ -165,3 +165,21 @@ export async function updateSession(
     return row!;
   });
 }
+
+/**
+ * Replaces a session's QR secret ("Reset code"): every copy of the old code, photo
+ * or printout, stops working at once. Only before the session has ended.
+ */
+export async function resetQrSecret(id: string): Promise<void> {
+  const [row] = await getDb()
+    .select({ status: serviceSessions.status })
+    .from(serviceSessions)
+    .where(eq(serviceSessions.id, id))
+    .limit(1);
+  if (!row) throw new SessionError("NOT_FOUND");
+  if (row.status !== "scheduled" && row.status !== "open") throw new SessionError("LOCKED");
+  await getDb()
+    .update(serviceSessions)
+    .set({ qrSecret: randomBytes(32).toString("base64url") })
+    .where(eq(serviceSessions.id, id));
+}

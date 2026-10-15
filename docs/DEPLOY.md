@@ -142,8 +142,9 @@ Do this at church on a weekday, with two or three people on different phones
    indoors (the "too far"/"too rough" messages say). Widen the radius if needed.
 4. Walk outside the radius and confirm "You're not at church yet".
 5. Show the code on the projector (**Show check-in code**), scan it with a phone
-   camera, and confirm check-in works. Take a photo of the code, wait a minute,
-   scan the photo: it must say the code has expired.
+   camera, and confirm check-in works. Send a photo of the code to someone away
+   from church: scanning it there must say they're not at church. Try **Reset code**
+   and check the old photo stops working.
 6. Admin: mark someone present by hand, excuse someone, close the session, then
    **Process absences now**. Confirm the "we missed you" email arrives (check spam;
    if it lands there, check the domain is Verified in Resend) and that a member with 3 misses

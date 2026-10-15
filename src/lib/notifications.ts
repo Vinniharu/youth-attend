@@ -203,7 +203,7 @@ async function sendFlagAlerts(rows: Claimed[], summary: SendSummary) {
         rows.map(async (row) => {
           const html = await render(
             createElement(AdminFlagAlertEmail, {
-              memberName: row.name,
+              memberName: row.name || row.email,
               streak: row.consecutiveAbsences,
               lastAttended: await lastAttended(row.userId),
               followUpUrl,
@@ -211,7 +211,7 @@ async function sendFlagAlerts(rows: Claimed[], summary: SendSummary) {
           );
           return {
             to: leaders.map((email) => ({ email })),
-            subject: `${row.name} has missed ${row.consecutiveAbsences} Sundays`,
+            subject: `${row.name || row.email} has missed ${row.consecutiveAbsences} Sundays`,
             html,
             text: toPlainText(html),
             tags: ["flag-alert"],

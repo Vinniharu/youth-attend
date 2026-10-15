@@ -16,6 +16,9 @@ import {
   updateMember,
 } from "@/lib/members";
 import { getAttendanceTrend, getThisSunday } from "@/lib/stats";
+import { getSessionAttendance } from "@/lib/attendance";
+import { getProfile, updateOwnProfile } from "@/lib/preferences";
+import { profileInput } from "@/lib/schemas";
 
 import { insertSession, insertUser, truncateAll } from "./helpers";
 
@@ -273,5 +276,35 @@ describe("dashboard stats", () => {
       { serviceDate: "2000-01-02", attended: 1, expected: 2 },
       { serviceDate: "2000-01-09", attended: 0, expected: 2 },
     ]);
+  });
+});
+
+describe("own profile (welcome step and settings)", () => {
+  it("sets only the signed-in member's own name and phone", async () => {
+    const [me, other] = [await insertUser({ name: "" }), await insertUser({ name: "Other" })];
+    await updateOwnProfile(me.id, { name: "Grace Okon", phone: "+234 800 2" });
+    expect(await getProfile(me.id)).toEqual({ name: "Grace Okon", phone: "+234 800 2" });
+    expect(await getProfile(other.id)).toEqual({ name: "Other", phone: "" });
+    await updateOwnProfile(me.id, { name: "Grace Okon", phone: "" });
+    expect((await getProfile(me.id)).phone).toBe("");
+  });
+
+  it("validates the name and phone", () => {
+    expect(profileInput.safeParse({ name: "  ", phone: "" }).success).toBe(false);
+    expect(profileInput.safeParse({ name: "Ada", phone: "call me" }).success).toBe(false);
+    expect(profileInput.parse({ name: "  Ada Okoro ", phone: "+234 (0) 800-1" })).toEqual({
+      name: "Ada Okoro",
+      phone: "+234 (0) 800-1",
+    });
+  });
+
+  it("leader lists show the email until a new member adds their name", async () => {
+    const newcomer = await insertUser({ name: "", email: "newcomer@church.org" });
+    const s = await insertSession(CHURCH);
+    await getDb()
+      .insert(attendanceLogs)
+      .values({ sessionId: s.id, userId: newcomer.id, method: "qr_scan" });
+    const detail = await getSessionAttendance(s.id);
+    expect(detail?.attended[0]?.name).toBe("newcomer@church.org");
   });
 });

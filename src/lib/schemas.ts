@@ -81,7 +81,11 @@ const memberFields = {
   role: z.enum(["member", "admin"]).default("member"),
 };
 
-/** Adding a member (admins add members; there is no open sign-up). */
+/** A member's own name and phone (/welcome after sign-up, and /settings). */
+export const profileInput = z.object({ name: memberFields.name, phone: memberFields.phone });
+export type ProfileInput = z.infer<typeof profileInput>;
+
+/** A leader adding a member (members can also sign up themselves). */
 export const newMemberInput = z.object(memberFields);
 export type NewMemberInput = z.infer<typeof newMemberInput>;
 

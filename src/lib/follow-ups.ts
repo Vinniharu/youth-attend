@@ -4,6 +4,7 @@ import { and, asc, desc, eq, isNotNull, isNull, type SQL, sql } from "drizzle-or
 import { alias } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/db/client";
+import { displayName } from "@/db/display-name";
 import { followUps, users } from "@/db/schema";
 
 export type FollowUpRow = {
@@ -35,7 +36,7 @@ async function query(open: boolean, limit: number): Promise<FollowUpRow[]> {
     .select({
       id: followUps.id,
       userId: users.id,
-      name: users.name,
+      name: displayName,
       email: users.email,
       phone: users.phone,
       streak: users.consecutiveAbsences,
