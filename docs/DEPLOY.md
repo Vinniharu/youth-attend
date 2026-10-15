@@ -1,5 +1,8 @@
 # Deploying Pulse
 
+> **Server already runs other sites?** Use [`DEPLOY-SHARED.md`](DEPLOY-SHARED.md)
+> instead: it plugs into your existing nginx/Caddy and opens no new ports.
+
 One small server runs everything with Docker: PostgreSQL + PostGIS, the app, the
 scheduler, nightly backups, and Caddy for HTTPS. Plan about 30 minutes for the first
 deploy, plus DNS and email verification time.

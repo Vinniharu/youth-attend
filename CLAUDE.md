@@ -128,6 +128,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Backups: `scripts/backup.sh` (`now` | `loop` | `restore FILE [DB]`), run by the `backup` service nightly at `BACKUP_HOUR`, keeping `BACKUP_KEEP_DAYS`; dumps in `./backups` (git-ignored).
 - First leader in production: `docker compose … run --rm migrate node scripts/create-admin.mjs "Name" email`. Never seed or reset production.
 - Full guide: `docs/DEPLOY.md` (Brevo SPF/DKIM/DMARC, env, backups, updates, dry run).
+- **Shared server** (the user's real target, `attend.getzylo.site`): `docker-compose.shared.yml` on top of base + prod, selected by `COMPOSE_FILE`/`COMPOSE_PROJECT_NAME=pulse-attend` in `.env`. Bundled Caddy off (profile), app on `127.0.0.1:${APP_PORT}` only (Docker ports bypass ufw), memory/CPU caps, `no-new-privileges`. Host proxy configs in `deploy/nginx/` and `deploy/caddy/` (nginx must set a **single** `X-Forwarded-For $remote_addr`: Better Auth ignores multi-value chains without `trustedProxies`; and `proxy_buffering off` for streaming). Guide: `docs/DEPLOY-SHARED.md`.
+- The db healthcheck uses `pg_isready -h 127.0.0.1`: over the socket it reports ready during first-time init, and `migrate` then fails on a fresh volume.
 
 ## Email (Brevo)
 

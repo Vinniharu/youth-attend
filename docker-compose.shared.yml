@@ -1,0 +1,53 @@
+# Shared-server overrides: for a server that already runs other web apps behind its
+# own reverse proxy (nginx, Caddy, …) on ports 80/443. Use on top of the prod file:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.shared.yml
+#   COMPOSE_PROJECT_NAME=pulse-attend
+#
+# (put both lines in .env and plain `docker compose …` picks them up).
+# Differences from the prod file:
+# - The bundled Caddy doesn't start, so ports 80/443 stay with the server's proxy.
+# - The app is published on the server's loopback only (127.0.0.1:APP_PORT), for the
+#   host proxy to forward to. Nothing is reachable from the internet directly, and
+#   Docker's own firewall rules (which bypass ufw) never open a public port.
+# - Memory/CPU caps so this stack can't starve the other apps on the server.
+# See docs/DEPLOY-SHARED.md.
+
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  db:
+    <<: *hardening
+    mem_limit: 768m
+    cpus: 1.0
+    # Keep Postgres inside its memory cap.
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50"]
+
+  migrate:
+    <<: *hardening
+    mem_limit: 256m
+
+  app:
+    <<: *hardening
+    ports: !override
+      - "127.0.0.1:${APP_PORT:?set APP_PORT in .env}:3000"
+    mem_limit: 768m
+    cpus: 1.0
+    environment:
+      NODE_OPTIONS: --max-old-space-size=512
+
+  scheduler:
+    <<: *hardening
+    mem_limit: 128m
+    cpus: 0.25
+
+  backup:
+    <<: *hardening
+    mem_limit: 256m
+    cpus: 0.5
+
+  # The server's own proxy handles HTTPS; this one only starts if asked for by name
+  # (`--profile bundled-caddy`), which you shouldn't do on a shared server.
+  caddy:
+    profiles: ["bundled-caddy"]

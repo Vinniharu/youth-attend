@@ -38,7 +38,7 @@ Design reference: `http://localhost:3000/styleguide` (dev only).
 docker compose up --build
 ```
 
-**Production:** see [`docs/DEPLOY.md`](docs/DEPLOY.md) (Caddy HTTPS, Brevo, backups, first leader, on-site dry run).
+**Production:** see [`docs/DEPLOY.md`](docs/DEPLOY.md), or [`docs/DEPLOY-SHARED.md`](docs/DEPLOY-SHARED.md) for a server shared with other sites (Caddy HTTPS, Brevo, backups, first leader, on-site dry run).
 
 ## Scripts
 

@@ -1,0 +1,20 @@
+# Pulse behind the server's existing Caddy. Paste this block into the server's
+# Caddyfile (or `import` this file from it), then: sudo systemctl reload caddy
+# Caddy fetches the HTTPS certificate itself. It replaces any client-sent
+# X-Forwarded-For with the real client IP, which the sign-in rate limits key on.
+# The port must match APP_PORT in the app's .env.
+
+attend.getzylo.site {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3061 {
+		# Pages stream (React Suspense); send each chunk straight away.
+		flush_interval -1
+	}
+	request_body {
+		max_size 2MB
+	}
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+	}
+}

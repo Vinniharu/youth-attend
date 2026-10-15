@@ -13,7 +13,9 @@ services:
       # Dev only, loopback only, so the app can run on the host. Override DB_PORT if 5432 is taken.
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U church -d attendance"]
+      # Over TCP: during first-time init Postgres runs a socket-only temporary server
+      # that pg_isready would otherwise report as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U church -d attendance"]
       interval: 5s
       timeout: 5s
       retries: 10
