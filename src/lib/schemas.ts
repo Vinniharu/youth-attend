@@ -52,3 +52,9 @@ export const checkinInput = pointSchema.extend({
   accuracy: z.number().positive(),
 });
 export type CheckinInput = z.infer<typeof checkinInput>;
+
+/** A QR check-in: the scanned token plus a GPS reading. */
+export const qrCheckinInput = checkinInput.extend({ token: z.string().min(1).max(200) });
+
+/** An admin marking a member present. */
+export const manualCheckinInput = z.object({ sessionId: z.uuid(), userId: z.uuid() });

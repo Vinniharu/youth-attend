@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -62,7 +63,12 @@ export function SessionList({ title, sessions, timeZone, empty }: Props) {
           {sessions.map((session) => (
             <li key={session.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
               <div className="min-w-40 flex-1">
-                <p className="font-medium">{formatDate(session.serviceDate)}</p>
+                <Link
+                  href={`/admin/sessions/${session.id}`}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {formatDate(session.serviceDate)}
+                </Link>
                 <p className="tabular text-sm text-muted-foreground">
                   {zonedTime(session.startsAt, timeZone)} to {zonedTime(session.endsAt, timeZone)}
                 </p>

@@ -1,50 +1,53 @@
-import { QrCode } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { Logo } from "@/components/brand/logo";
-import { Button } from "@/components/ui/button";
+import { QrCheckin } from "@/components/qr/qr-checkin";
 import { Skeleton } from "@/components/ui/skeleton";
+import { appTimeZone } from "@/lib/config";
 import { requireUser } from "@/lib/dal";
+import { extractToken } from "@/lib/qr-link";
 
 export const metadata: Metadata = { title: "Scan QR" };
 
-// Placeholder until Phase 6 adds the scanner.
-export default function ScanPage() {
+// The QR fallback. Reached from the home card ("Scan QR instead"), or straight from
+// a phone's camera app: the code on the church screen encodes /scan?t=<token>.
+export default function ScanPage({ searchParams }: PageProps<"/scan">) {
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-6">
-      <header>
+      <header className="flex items-center justify-between">
         <Link href="/" aria-label="Pulse home">
           <Logo />
         </Link>
+        <Link
+          href="/"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          Back
+        </Link>
       </header>
-      <main className="flex flex-1 flex-col justify-center gap-6 py-12">
-        <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
-          <ScanPlaceholder />
+      <main className="flex flex-1 flex-col gap-6 py-8">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold">Scan the code</h1>
+          <p className="text-muted-foreground">
+            When your location won&apos;t check you in on its own, scan the code on the screen at
+            the front of church.
+          </p>
+        </div>
+        <Suspense fallback={<Skeleton className="aspect-square w-full rounded-[2rem]" />}>
+          <Scan searchParams={searchParams} />
         </Suspense>
       </main>
     </div>
   );
 }
 
-async function ScanPlaceholder() {
+async function Scan({ searchParams }: Pick<PageProps<"/scan">, "searchParams">) {
   await requireUser();
-  return (
-    <>
-      <span className="flex size-14 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
-        <QrCode className="size-7" aria-hidden />
-      </span>
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold">Scanning is coming soon</h1>
-        <p className="text-muted-foreground">
-          Soon you&apos;ll be able to scan the code on the screen at church when your location
-          won&apos;t work. Until then, ask a youth leader to mark you present.
-        </p>
-      </div>
-      <Button asChild variant="outline" className="h-12 rounded-xl text-base">
-        <Link href="/">Back to check-in</Link>
-      </Button>
-    </>
-  );
+  const { t } = await searchParams;
+  const token = typeof t === "string" ? extractToken(t) : null;
+  return <QrCheckin initialToken={token} timeZone={appTimeZone()} />;
 }

@@ -82,3 +82,18 @@ export function haversineM(a: LatLng, b: LatLng): number {
     Math.sin(dφ / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dλ / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
+
+/** Distance (metres, PostGIS spheroid) from `point` to a session's geofence centre. */
+export async function distanceToSession(
+  db: NodePgDatabase,
+  sessionId: string,
+  point: LatLng,
+): Promise<{ distanceM: number; radiusM: number } | null> {
+  const result = await db.execute<{ distance_m: number; radius_m: number }>(sql`
+    SELECT ST_Distance(s.center, ${pointSql(point)}) AS distance_m, s.radius_m
+    FROM service_sessions s
+    WHERE s.id = ${sessionId}
+  `);
+  const row = result.rows[0];
+  return row ? { distanceM: Number(row.distance_m), radiusM: Number(row.radius_m) } : null;
+}

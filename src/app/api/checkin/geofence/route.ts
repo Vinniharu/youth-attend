@@ -1,15 +1,10 @@
 import { connection } from "next/server";
 
 import { internalError, parseBody } from "@/lib/api";
-import { checkInWithGeofence } from "@/lib/checkin";
+import { checkInWithGeofence, checkinLimiter } from "@/lib/checkin";
 import type { CheckinResult } from "@/lib/checkin-types";
 import { authorizeApi } from "@/lib/dal";
-import { createRateLimiter } from "@/lib/rate-limit";
 import { checkinInput } from "@/lib/schemas";
-
-// 5 attempts per member per 5 minutes (per the spec), across all check-in methods
-// once the QR route exists.
-const limiter = createRateLimiter({ limit: 5, windowMs: 5 * 60_000 });
 
 const result = (body: CheckinResult, status = 200) => Response.json(body, { status });
 
@@ -19,7 +14,8 @@ export async function POST(request: Request) {
   const auth = await authorizeApi();
   if (!auth.ok) return result({ ok: false, reason: "UNAUTHENTICATED" }, 401);
 
-  const limited = limiter.hit(auth.user.id);
+  // Shared with the QR route: 5 attempts per member per 5 minutes in total.
+  const limited = checkinLimiter.hit(auth.user.id);
   if (!limited.ok) {
     return result(
       { ok: false, reason: "RATE_LIMITED", retryAfterS: Math.ceil(limited.retryAfterMs / 1000) },

@@ -1,13 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import {
-  attendanceCount,
-  CHURCH,
-  closeE2eDb,
-  createMember,
-  plantSignInCode,
-  setSessionStatus,
-} from "./db";
+import { attendanceCount, CHURCH, closeE2eDb, setSessionStatus } from "./db";
+import { signIn } from "./sign-in";
 
 // The five geolocation scenarios from the Phase 4 done-when check, each as its own
 // member so the per-member rate limit never couples the tests.
@@ -16,23 +10,6 @@ const metresNorth = (m: number) => ({
   latitude: CHURCH.lat + m / 111_320,
   longitude: CHURCH.lng,
 });
-
-/**
- * Signs in with a planted code through Better Auth's real sign-in endpoint. The
- * request shares the page's cookie jar, so the browser is then signed in. (The
- * login screen itself would ask Brevo to email a code, which E2E must not do.)
- */
-async function signIn(page: Page, email: string) {
-  await createMember(email, "Tobi Adeyemi");
-  await plantSignInCode(email, "246810");
-  const baseURL = test.info().project.use.baseURL!;
-  const response = await page.request.post("/api/auth/sign-in/email-otp", {
-    data: { email, otp: "246810" },
-    headers: { origin: baseURL },
-  });
-  expect(response.ok()).toBe(true);
-  await page.goto("/");
-}
 
 test.afterAll(closeE2eDb);
 

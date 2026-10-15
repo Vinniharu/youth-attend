@@ -12,7 +12,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
 - **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
 - **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
-- **Next: Phase 6 (QR fallback).**
+- **Phase 6 (QR fallback): done.** Rotating tokens, projector display, `/scan` (camera or phone-camera link), relaxed-location QR check-in, admin manual check-in, session detail page.
+- **Next: Phase 7 (absence engine & emails).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -86,6 +87,17 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
   - iOS: Share → Add to Home Screen steps.
   - Hidden when standalone; "Not now" snoozes it for 14 days (localStorage).
 - **Lighthouse 12+ has no PWA category.** The installability check is Chrome's own (`Page.getInstallabilityErrors` over CDP), run from a non-incognito profile.
+
+## QR fallback
+
+- Tokens: `src/lib/qr-token.ts` (server, HMAC per spec; valid in their window and the next, so a photo dies within ~60 s; non-canonical base64url signatures rejected). Client-safe shape/link helpers in `src/lib/qr-link.ts`.
+- The code encodes a link, `APP_URL/scan?t=<token>` (`appUrl()`), so a phone's own camera app opens Pulse at check-in. `/scan` drops `t` from the address bar after reading it.
+- Display: `/admin/sessions/[id]/display` (`QrDisplay`, full-screen overlay) polls `GET /api/admin/sessions/:id/qr-token` every 10 s and right after each window, corrects for clock skew, keeps the screen awake (Wake Lock), shows a live count.
+- **QR location rule (user's choice: relaxed):** `checkInWithQr` accepts accuracy up to `QR_MAX_ACCURACY_M` (default 2 × `MAX_ACCURACY_M` = 150 m) and counts the member inside when distance ≤ radius + accuracy. Forwarded codes used far away still fail.
+- One shared rate limiter (`checkinLimiter`, on `globalThis`) for both check-in routes.
+- Manual check-in: `POST /api/admin/attendance` (`recordManualCheckIn`), allowed for scheduled/open/closed sessions only (processed would leave streaks wrong). The session page lists every active member not checked in or excused, including people added on the day.
+- Scanner: `@yudiel/react-qr-scanner`, client-only. Its zxing decoder is **self-hosted** at `public/vendor/zxing_reader-<version>.wasm` (the library otherwise fetches it from a CDN); `tests/unit/zxing-wasm.test.ts` fails if the installed `zxing-wasm` version moves without refreshing that copy.
+- Check-in screens shared by the home card and the scanner live in `src/components/checkin/checkin-views.tsx` (`ViewBody`, `submitCheckin`, `readPosition`).
 
 ## Email (Brevo)
 
@@ -665,10 +677,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 6: QR fallback
 
-- [ ] `lib/qr-token.ts` with tests
-- [ ] Admin display page (full-screen, 30 s rotation, countdown)
-- [ ] Member scanner page → GPS → `POST /api/checkin/qr`
-- [ ] Admin manual check-in
+- [x] `lib/qr-token.ts` with tests
+- [x] Admin display page (full-screen, 30 s rotation, countdown)
+- [x] Member scanner page → GPS → `POST /api/checkin/qr`
+- [x] Admin manual check-in
 
 **Done when:** A screenshot of the QR stops working within about 60 s; a valid scan from outside the geofence is rejected.
 

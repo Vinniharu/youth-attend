@@ -54,11 +54,23 @@ export async function setSessionStatus(status: "open" | "scheduled") {
   await db().query("UPDATE service_sessions SET status = $1", [status]);
 }
 
-export async function createMember(email: string, name = "Test Member") {
+export async function createMember(
+  email: string,
+  name = "Test Member",
+  role: "member" | "admin" = "member",
+) {
   await db().query(
-    "INSERT INTO users (id, name, email, email_verified) VALUES ($1, $2, $3, true) ON CONFLICT (email) DO NOTHING",
-    [randomUUID(), name, email],
+    "INSERT INTO users (id, name, email, email_verified, role) VALUES ($1, $2, $3, true, $4) ON CONFLICT (email) DO NOTHING",
+    [randomUUID(), name, email, role],
   );
+}
+
+/** The id of the open session resetE2eData created. */
+export async function openSessionId(): Promise<string> {
+  const { rows } = await db().query<{ id: string }>(
+    "SELECT id FROM service_sessions WHERE status = 'open' LIMIT 1",
+  );
+  return rows[0]!.id;
 }
 
 /**
