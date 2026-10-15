@@ -8,15 +8,15 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 - **Phase 0 (scaffold & infrastructure): done.** Full `docker compose up --build` verified (db → migrate → app, health ok).
 - **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
-- **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, Brevo email.
+- **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, transactional email.
 - **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
 - **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
 - **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
 - **Phase 6 (QR fallback): done.** Rotating tokens, projector display, `/scan` (camera or phone-camera link), relaxed-location QR check-in, admin manual check-in, session detail page.
-- **Phase 7 (absence engine & emails): done.** `lib/absences.ts`, Brevo batch sending, cron routes + `scheduler` service, unsubscribe page, `/settings`.
+- **Phase 7 (absence engine & emails): done.** `lib/absences.ts`, batch email sending, cron routes + `scheduler` service, unsubscribe page, `/settings`.
 - **Phase 8 (admin dashboard): done.** Overview (follow-ups first, this Sunday live, 12-week trend), `/admin/follow-ups`, `/admin/members` (+ CSV import/export, member detail with history), excusals, member `/history`.
-- **Phase 9 (hardening & production): done in the repo.** CSP + headers, error logging, slim tool images, `docker-compose.prod.yml` with Caddy (HTTPS) and nightly backups (restore tested), `create-admin`, `docs/DEPLOY.md`. **Left for the user:** deploy on their server/domain, Brevo domain verification, and the on-site dry run (`docs/DEPLOY.md` §10).
-- **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
+- **Phase 9 (hardening & production): done in the repo.** CSP + headers, error logging, slim tool images, `docker-compose.prod.yml` with Caddy (HTTPS) and nightly backups (restore tested), `create-admin`, `docs/DEPLOY.md`. **Left for the user:** deploy on their server/domain, Resend domain verification, and the on-site dry run (`docs/DEPLOY.md` §10).
+- **Email provider is Resend** (REST API via plain `fetch`). The project used Brevo until the user moved it to Resend (they run another product on Brevo); nothing Brevo-specific remains.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
 ## Ground rules
@@ -104,7 +104,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 ## Absence engine & jobs
 
 - `processAbsences()` (`src/lib/absences.ts`): each closed, unprocessed session in its own transaction (row-locked), set-based SQL per the spec table; then `sendPendingNotifications()` after commit. Eligible: active `member` role, `joined_at < starts_at`. Processed and cancelled sessions are never touched. A returning flagged member's streak resets but `is_flagged` and the follow-up stay until a leader resolves it (Phase 8).
-- `src/lib/notifications.ts`: claims `pending`/`failed` rows (last 7 days) atomically by setting `sending`, skips members who unsubscribed or left, sends "missed you" as one Brevo `messageVersions` batch per Sunday (template rendered once with `{{ params.firstName }}` / `{{ params.unsubscribeUrl }}`), and one leader alert per flagged member to `ADMIN_ALERT_EMAILS`. Records `provider_message_id`, `status` (sent/failed/skipped) and `error`; failures retry on the next run.
+- `src/lib/notifications.ts`: claims `pending`/`failed` rows (last 7 days) atomically by setting `sending`, skips members who unsubscribed or left, renders "missed you" per member and sends one Resend batch per Sunday; leader alerts (one email per flagged member to `ADMIN_ALERT_EMAILS`) go in one batch too. Shared helper `sendBatchFor()`. Records `provider_message_id`, `status` (sent/failed/skipped) and `error`; failures retry on the next run.
 - Jobs (`src/lib/jobs.ts`): `createUpcomingSession`, `openAndCloseSessions` (never reopens an admin-closed session; closes never-opened past sessions so they get processed), `purgeOldLocations` (nulls `location` and `accuracy_m`). Routes `POST /api/cron/*` require `Authorization: Bearer $CRON_SECRET` (`rejectUnlessCron`, constant-time; 503 if unset).
 - `scripts/scheduler.mjs` (croner, `APP_TIMEZONE`) calls them; Docker `scheduler` service (Dockerfile `scheduler` stage), `npm run scheduler` locally. Admins can also "Process absences now" on a closed session (`POST /api/admin/sessions/:id/process`).
 - Unsubscribe: `src/lib/unsubscribe.ts` signs `/unsubscribe?u=&s=` (HMAC, `UNSUBSCRIBE_SECRET`). The public page asks for a button press (`POST /api/unsubscribe`) so email link scanners can't unsubscribe people. Members can switch emails back on at `/settings` (`PATCH /api/me/preferences`).
@@ -127,19 +127,19 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Docker images: `tools` stage bundles `scripts/{migrate,scheduler,create-admin}.mjs` with esbuild (`scripts/bundle-tools.mjs`), so `migrator`/`scheduler` are bare `node:22-alpine` + one file (238 MB vs 1.32 GB).
 - Backups: `scripts/backup.sh` (`now` | `loop` | `restore FILE [DB]`), run by the `backup` service nightly at `BACKUP_HOUR`, keeping `BACKUP_KEEP_DAYS`; dumps in `./backups` (git-ignored).
 - First leader in production: `docker compose … run --rm migrate node scripts/create-admin.mjs "Name" email`. Never seed or reset production.
-- Full guide: `docs/DEPLOY.md` (Brevo SPF/DKIM/DMARC, env, backups, updates, dry run).
+- Full guide: `docs/DEPLOY.md` (Resend domain DNS, env, backups, updates, dry run).
 - **Shared server** (the user's real target, `attend.getzylo.site`): `docker-compose.shared.yml` on top of base + prod, selected by `COMPOSE_FILE`/`COMPOSE_PROJECT_NAME=pulse-attend` in `.env`. Bundled Caddy off (profile), app on `127.0.0.1:${APP_PORT}` only (Docker ports bypass ufw), memory/CPU caps, `no-new-privileges`. Host proxy configs in `deploy/nginx/` and `deploy/caddy/` (nginx must set a **single** `X-Forwarded-For $remote_addr`: Better Auth ignores multi-value chains without `trustedProxies`; and `proxy_buffering off` for streaming). Guide: `docs/DEPLOY-SHARED.md`.
 - The db healthcheck uses `pg_isready -h 127.0.0.1`: over the socket it reports ready during first-time init, and `migrate` then fails on a fresh volume.
 
-## Email (Brevo)
+## Email (Resend)
 
-- `src/lib/email.ts`: `sendEmail()` posts to Brevo's `POST /v3/smtp/email` with plain `fetch` (no SDK). Sender comes from `EMAIL_FROM` (must be a verified Brevo sender).
-- Without `BREVO_API_KEY`: skipped in development, an error in production. Integration tests force it empty.
+- `src/lib/email.ts`: `sendEmail()` posts to Resend's `POST /emails`, `sendEmailBatch()` to `POST /emails/batch` (≤ 100 emails per request, ids returned in order), with plain `fetch` (no SDK; the `resend` package isn't installed). `Authorization: Bearer RESEND_API_KEY`. `from` is `EMAIL_FROM` reformatted as `Name <address>` (must be on a domain verified in Resend). Tags become `{ name: "category", value }`. A 429 is retried once after `Retry-After` (≤ 2 s).
+- Without `RESEND_API_KEY`: skipped in development, an error in production. Integration tests force it empty.
 - Templates live in `src/emails/` (react-email v6: `render` + `toPlainText`; send HTML and text).
 - Exception to the no-raw-hex rule: email clients ignore CSS variables, so templates inline Pulse hex values. Keep them in sync with `globals.css`.
-- In production, requesting a sign-in code fails (500, logged) without `BREVO_API_KEY` and a valid `EMAIL_FROM` (`assertEmailConfig()`); existing sessions keep working. The Docker stack runs NODE_ENV=production, so it needs both before anyone new can sign in.
+- In production, requesting a sign-in code fails (500, logged) without `RESEND_API_KEY` and a valid `EMAIL_FROM` (`assertEmailConfig()`); existing sessions keep working. The Docker stack runs NODE_ENV=production, so it needs both before anyone new can sign in.
 - Sliding sessions: the DAL reads sessions with `disableRefresh` (Server Components can't set cookies); `<SessionKeepAlive />` in the root layout refreshes DB expiry and cookie together via `/api/auth/get-session`.
-- Phase 7 batching: use Brevo `messageVersions` (≤ 99 recipients per version, ≤ 2000 per request) or one request per member. `notifications_log.provider_message_id` stores Brevo's `messageId`.
+- Resend has no per-recipient template params in batches, so each email is rendered with real values. `notifications_log.provider_message_id` stores Resend's email `id` (the column was renamed provider-neutral in migration 0004).
 
 ## Database
 
@@ -216,7 +216,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 
 - Docker and Docker Compose v2
 - Node.js 22 LTS and npm (for running the app outside Docker in development)
-- A Brevo account with an API key (a verified sender/domain is needed for production)
+- A Resend account with an API key (a verified domain is needed for production)
 
 ### 1. Clone and configure
 
@@ -255,7 +255,7 @@ Migrations run automatically when the app container starts.
 
 ### 3. Log in
 
-The seed creates an admin with the email set in `SEED_ADMIN_EMAIL`. Request a code on `/login`. In development, OTP codes are also printed to the server console, so you don't need Brevo set up to log in locally.
+The seed creates an admin with the email set in `SEED_ADMIN_EMAIL`. Request a code on `/login`. In development, OTP codes are also printed to the server console, so you don't need Resend set up to log in locally.
 
 ### npm scripts
 
@@ -290,8 +290,8 @@ BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
 SEED_ADMIN_EMAIL=you@example.com
 
-# Email (Brevo)
-BREVO_API_KEY=
+# Email (Resend)
+RESEND_API_KEY=
 EMAIL_FROM="Youth Church <noreply@yourdomain.org>"
 ADMIN_ALERT_EMAILS=pastor@yourdomain.org,youthlead@yourdomain.org
 
@@ -372,7 +372,7 @@ youth-attendance/
 │   │   ├── geo.ts                 # PostGIS helpers
 │   │   ├── qr-token.ts            # rotating HMAC tokens
 │   │   ├── absences.ts            # absence engine
-│   │   ├── email.ts               # Brevo wrapper + batching
+│   │   ├── email.ts               # Resend wrapper + batching
 │   │   ├── rate-limit.ts
 │   │   └── time.ts                # timezone helpers
 │   ├── emails/
@@ -475,7 +475,7 @@ CREATE TABLE notifications_log (
   user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   session_id  uuid REFERENCES service_sessions(id) ON DELETE SET NULL,
   type        notif_type NOT NULL,
-  provider_message_id text,   -- Brevo messageId
+  provider_message_id text,   -- Resend email id
   status      text NOT NULL DEFAULT 'pending',   -- pending | sent | failed | skipped
   error       text,
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -576,7 +576,7 @@ Inside **one transaction**, for each active member whose `joined_at` is before t
 
 Then set `absences_processed_at = now()` and `status = 'processed'`.
 
-**After commit**, send queued emails through Brevo (`messageVersions` batches: ≤ 99 recipients per version, ≤ 2000 per request) and record `provider_message_id`, `status`, and `error` in `notifications_log`. The unique constraint on `(user_id, session_id, type)` guarantees no duplicate emails, even if the job is retried.
+**After commit**, send queued emails through Resend (batch endpoint, ≤ 100 emails per request) and record `provider_message_id`, `status`, and `error` in `notifications_log`. The unique constraint on `(user_id, session_id, type)` guarantees no duplicate emails, even if the job is retried.
 
 **Cancelled sessions** are skipped entirely.
 
@@ -719,10 +719,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 - [x] Cron routes + scheduler service
 - [x] `lib/absences.ts` per the spec, with tests for every branch and for idempotency
-- [x] React Email templates, Brevo batch sending, `notifications_log`
+- [x] React Email templates, Resend batch sending, `notifications_log`
 - [x] Signed unsubscribe link and settings page
 
-**Done when:** Running the job twice sends no duplicates; emails render correctly in Brevo.
+**Done when:** Running the job twice sends no duplicates; emails render correctly in Resend.
 
 ### Phase 8: Admin dashboard
 
@@ -736,7 +736,7 @@ Each phase ends with a **done-when** check. Commit after every phase.
 ### Phase 9: Hardening & production
 
 - [x] Rate limiting, security headers, location purge job
-- [x] Backups, Caddy HTTPS, Brevo domain verification (SPF, DKIM, DMARC), error logging
+- [x] Backups, Caddy HTTPS, Resend domain verification (DKIM, SPF, DMARC), error logging
 - [x] Full E2E run; [ ] on-site dry run (user, `docs/DEPLOY.md` §10)
 
 **Done when:** Deployed over HTTPS on your domain, a backup restores successfully, and a real Sunday dry run succeeds.

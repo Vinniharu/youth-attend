@@ -85,24 +85,24 @@ dig +short attend.getzylo.site     # must print the server's IP
 
 ---
 
-## Step 2. Email (Brevo)
+## Step 2. Email (Resend)
 
 Sign-in codes are emailed, so this must work before anyone else can log in.
 
-1. In Brevo: **Senders, domains & dedicated IPs → Domains → Add a domain →
-   `getzylo.site`.**
-2. Add the DNS records Brevo shows. Be careful with records other services already use:
-   - **Brevo code** (TXT) and **DKIM** (exactly the names Brevo lists, under
-     `_domainkey`): new names, safe to add.
-   - **SPF:** a domain may have **only one** SPF TXT record. If `getzylo.site` already
-     has one (e.g. `v=spf1 include:_spf.google.com ~all`), **edit** it to add Brevo
-     rather than creating a second:
-     `v=spf1 include:_spf.google.com include:spf.brevo.com ~all`
+1. In Resend: **Domains → Add Domain → `getzylo.site`**.
+2. Add the DNS records Resend shows. They use their own names, so they **don't touch**
+   records that other services (such as a product sending through Brevo) already use:
+   - **DKIM:** a TXT record on `resend._domainkey`
+   - **SPF / bounces:** an MX and a TXT record on the `send` subdomain
+     (`send.getzylo.site`), not on the root, so the root SPF record stays as it is.
    - **DMARC:** if `_dmarc.getzylo.site` already exists, leave it. If not, add TXT
      `_dmarc` = `v=DMARC1; p=none; rua=mailto:you@getzylo.site`.
-3. Wait for Brevo to show the domain as **Authenticated**. Then add a sender such as
-   `noreply@getzylo.site`.
-4. **SMTP & API → API keys → Generate a new API key.** Copy it for step 4.
+3. Click **Verify** and wait until the domain shows **Verified** (minutes to a few
+   hours).
+4. **API Keys → Create API Key:** permission **Sending access**, domain
+   `getzylo.site`. Copy it (it's shown once) for step 4.
+
+Any address on the verified domain can send; this guide uses `noreply@getzylo.site`.
 
 ---
 
@@ -157,7 +157,7 @@ BETTER_AUTH_SECRET=<from above>
 CRON_SECRET=<from above>
 UNSUBSCRIBE_SECRET=<from above>
 
-BREVO_API_KEY=<from step 2>
+RESEND_API_KEY=<from step 2>
 EMAIL_FROM="Pulse <noreply@getzylo.site>"
 ADMIN_ALERT_EMAILS=pastor@example.org,youthlead@example.org   # leaders who get follow-up alerts
 
@@ -308,6 +308,20 @@ Commands that **affect other apps or delete data**; don't use them here:
 - `docker compose down -v` (deletes Pulse's database volume).
 - `sudo systemctl restart nginx` (use `reload`; a bad config would take every site down
   on restart, whereas `nginx -t` + `reload` keeps the old config running).
+
+## Switching an existing install from Brevo to Resend
+
+Installs set up before the switch used `BREVO_API_KEY`. To move over:
+
+1. Do Step 2 (Resend domain + API key). Leave any Brevo DNS records in place if
+   another product still sends through Brevo.
+2. `cd /opt/pulse-attend && git pull`
+3. `nano .env`: delete the `BREVO_API_KEY=` line, add `RESEND_API_KEY=re_…`, and make
+   sure `EMAIL_FROM` uses the domain verified in Resend.
+4. `docker compose up -d --build`, then `docker compose up -d --force-recreate app`
+   (makes sure the app reads the new `.env`).
+5. Request a sign-in code at `/login`; it should arrive and show in Resend's **Emails**
+   log. If not: `docker compose logs app | grep -iE 'email|resend'`.
 
 ## Removing Pulse later
 

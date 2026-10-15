@@ -36,6 +36,9 @@ test("a leader runs a Sunday end to end, then the follow-up", async ({ page }) =
   const row = (email: string) => page.getByRole("listitem").filter({ hasText: email });
   await row("grace@example.com").getByRole("button", { name: "Mark present" }).click();
   await expect(page.getByText("Grace Okon is marked present.")).toBeVisible();
+  // Search first, as a leader would on a long list. It also keeps the row away from
+  // the bottom of the phone viewport, where the toast (paused while hovered) sits.
+  await page.getByLabel("Search members").fill("travelling");
   await row("travelling@example.com").getByRole("button", { name: "Excuse" }).click();
   await page.getByLabel("Reason Travelling Tunde is excused").fill("Travelling with family");
   await row("travelling@example.com").getByRole("button", { name: "Excuse" }).last().click();

@@ -2,8 +2,7 @@ import { Button, Heading, Link, Text } from "react-email";
 
 import { EmailShell, INK, MUTED, button, paragraph } from "./theme";
 
-// Rendered once per batch with Brevo placeholders as props (see lib/notifications.ts),
-// then personalised per member by Brevo `messageVersions` params.
+// Rendered per member (see lib/notifications.ts) and sent in Resend batches.
 
 export type MissedYouProps = {
   firstName: string;

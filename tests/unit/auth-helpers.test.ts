@@ -46,7 +46,7 @@ describe("parseSender", () => {
   });
 });
 
-describe("sendEmail (Brevo)", () => {
+describe("sendEmail (Resend)", () => {
   const message = {
     to: { email: "tobi@example.com" },
     subject: "Hi",
@@ -60,7 +60,7 @@ describe("sendEmail (Brevo)", () => {
   });
 
   it("skips sending in development without an API key", async () => {
-    vi.stubEnv("BREVO_API_KEY", "");
+    vi.stubEnv("RESEND_API_KEY", "");
     vi.stubEnv("NODE_ENV", "development");
     vi.spyOn(console, "info").mockImplementation(() => {});
     const fetchMock = vi.fn();
@@ -71,47 +71,61 @@ describe("sendEmail (Brevo)", () => {
   });
 
   it("refuses to run without an API key in production", async () => {
-    vi.stubEnv("BREVO_API_KEY", "");
+    vi.stubEnv("RESEND_API_KEY", "");
     vi.stubEnv("NODE_ENV", "production");
-    await expect(sendEmail(message)).rejects.toThrow(/BREVO_API_KEY/);
+    await expect(sendEmail(message)).rejects.toThrow(/RESEND_API_KEY/);
   });
 
-  it("posts the message to Brevo and returns its message id", async () => {
-    vi.stubEnv("BREVO_API_KEY", "test-key");
-    vi.stubEnv("EMAIL_FROM", "Youth Church <noreply@church.org>");
-    const fetchMock = vi.fn(async () =>
-      Response.json({ messageId: "<abc@smtp-relay>" }, { status: 201 }),
-    );
+  it("posts the message to Resend and returns its email id", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", '"Youth Church" <noreply@church.org>');
+    const fetchMock = vi.fn(async () => Response.json({ id: "49a3999c-0ce1" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(sendEmail({ ...message, tags: ["login-code"] })).resolves.toEqual({
       status: "sent",
-      messageId: "<abc@smtp-relay>",
+      messageId: "49a3999c-0ce1",
     });
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://api.brevo.com/v3/smtp/email");
-    expect(new Headers(init.headers).get("api-key")).toBe("test-key");
+    expect(url).toBe("https://api.resend.com/emails");
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer re_test");
     expect(JSON.parse(String(init.body))).toEqual({
-      sender: { name: "Youth Church", email: "noreply@church.org" },
-      to: [{ email: "tobi@example.com" }],
+      from: "Youth Church <noreply@church.org>",
+      to: ["tobi@example.com"],
       subject: "Hi",
-      htmlContent: "<p>Hi</p>",
-      textContent: "Hi",
-      tags: ["login-code"],
+      html: "<p>Hi</p>",
+      text: "Hi",
+      tags: [{ name: "category", value: "login-code" }],
     });
   });
 
-  it("throws with Brevo's error detail on failure", async () => {
-    vi.stubEnv("BREVO_API_KEY", "bad-key");
+  it("throws with Resend's error detail on failure", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_bad");
     vi.stubEnv("EMAIL_FROM", "noreply@church.org");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        Response.json({ code: "unauthorized", message: "Key not found" }, { status: 401 }),
+        Response.json({ name: "validation_error", message: "API key is invalid" }, { status: 401 }),
       ),
     );
-    await expect(sendEmail(message)).rejects.toThrow(/401.*unauthorized/);
+    await expect(sendEmail(message)).rejects.toThrow(/Resend responded 401.*invalid/);
+  });
+
+  it("retries once when rate limited", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "noreply@church.org");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "0.01" } }))
+      .mockResolvedValueOnce(Response.json({ id: "after-retry" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(sendEmail(message)).resolves.toEqual({
+      status: "sent",
+      messageId: "after-retry",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

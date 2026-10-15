@@ -45,7 +45,7 @@ export default defineConfig({
           APP_URL: baseURL,
           // Production refuses to issue codes without email config. Specs sign in by
           // planting a code and calling the sign-in endpoint, so nothing is ever sent.
-          BREVO_API_KEY: "e2e-unused",
+          RESEND_API_KEY: "e2e-unused",
         },
       },
 });

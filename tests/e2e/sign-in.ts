@@ -5,7 +5,7 @@ import { createMember, plantSignInCode } from "./db";
 /**
  * Signs in with a planted code through Better Auth's real sign-in endpoint. The
  * request shares the page's cookie jar, so the browser is then signed in. (The
- * login screen itself would ask Brevo to email a code, which E2E must not do.)
+ * login screen itself would ask Resend to email a code, which E2E must not do.)
  */
 export async function signIn(page: Page, email: string, role: "member" | "admin" = "member") {
   await createMember(email, role === "admin" ? "Ada Okoro" : "Tobi Adeyemi", role);

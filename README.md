@@ -28,7 +28,7 @@ npm run dev            # http://localhost:3000
 curl localhost:3000/api/health   # {"db":"ok","postgis":"3.6.x"}
 ```
 
-**Signing in:** open `/login` and enter `SEED_ADMIN_EMAIL` (or any seeded member, e.g. `tobi.adeyemi@example.com`). Without `BREVO_API_KEY`, the 6-digit code is printed in the dev server console instead of emailed. With a key, emails go out through Brevo from `EMAIL_FROM`, which must be a verified sender in your Brevo account.
+**Signing in:** open `/login` and enter `SEED_ADMIN_EMAIL` (or any seeded member, e.g. `tobi.adeyemi@example.com`). Without `RESEND_API_KEY`, the 6-digit code is printed in the dev server console instead of emailed. With a key, emails go out through Resend from `EMAIL_FROM`, which must use a domain verified in your Resend account.
 
 Design reference: `http://localhost:3000/styleguide` (dev only).
 
@@ -38,7 +38,7 @@ Design reference: `http://localhost:3000/styleguide` (dev only).
 docker compose up --build
 ```
 
-**Production:** see [`docs/DEPLOY.md`](docs/DEPLOY.md), or [`docs/DEPLOY-SHARED.md`](docs/DEPLOY-SHARED.md) for a server shared with other sites (Caddy HTTPS, Brevo, backups, first leader, on-site dry run).
+**Production:** see [`docs/DEPLOY.md`](docs/DEPLOY.md), or [`docs/DEPLOY-SHARED.md`](docs/DEPLOY-SHARED.md) for a server shared with other sites (Caddy HTTPS, Resend, backups, first leader, on-site dry run).
 
 ## Scripts
 

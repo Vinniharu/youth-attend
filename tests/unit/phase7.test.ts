@@ -54,46 +54,42 @@ describe("unsubscribe links", () => {
 });
 
 describe("sendEmailBatch", () => {
-  it("splits into Brevo requests of BATCH_SIZE and keeps message ids in order", async () => {
-    vi.stubEnv("BREVO_API_KEY", "k");
-    vi.stubEnv("EMAIL_FROM", "noreply@church.org");
-    let n = 0;
-    const brevo = vi.fn(async (_url: string, init: RequestInit) => {
-      const { messageVersions } = JSON.parse(String(init.body)) as { messageVersions: unknown[] };
-      return Response.json({ messageIds: messageVersions.map(() => `<${n++}>`) });
-    });
-    vi.stubGlobal("fetch", brevo);
-
-    const versions = Array.from({ length: BATCH_SIZE + 1 }, (_, i) => ({
-      to: { email: `m${i}@example.com` },
-      params: { firstName: `M${i}` },
-    }));
-    const result = await sendEmailBatch({ subject: "s", html: "h", text: "t", versions });
-
-    expect(brevo).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({
-      status: "sent",
-      messageIds: versions.map((_, i) => `<${i}>`),
-    });
+  const message = (i: number) => ({
+    to: { email: `m${i}@example.com` },
+    subject: `s${i}`,
+    html: `h${i}`,
+    text: `t${i}`,
   });
 
-  it("fails loudly if Brevo returns fewer ids than recipients", async () => {
-    vi.stubEnv("BREVO_API_KEY", "k");
+  it("splits into Resend batch requests of BATCH_SIZE and keeps ids in order", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_k");
+    vi.stubEnv("EMAIL_FROM", "noreply@church.org");
+    let n = 0;
+    const resend = vi.fn(async (url: string, init: RequestInit) => {
+      expect(url).toBe("https://api.resend.com/emails/batch");
+      const emails = JSON.parse(String(init.body)) as unknown[];
+      return Response.json({ data: emails.map(() => ({ id: `id-${n++}` })) });
+    });
+    vi.stubGlobal("fetch", resend);
+
+    const messages = Array.from({ length: BATCH_SIZE + 1 }, (_, i) => message(i));
+    const result = await sendEmailBatch(messages);
+
+    expect(resend).toHaveBeenCalledTimes(2);
+    const second = JSON.parse(String(resend.mock.calls[1]![1].body)) as { to: string[] }[];
+    expect(second).toEqual([expect.objectContaining({ to: [`m${BATCH_SIZE}@example.com`] })]);
+    expect(result).toEqual({ status: "sent", messageIds: messages.map((_, i) => `id-${i}`) });
+  });
+
+  it("fails loudly if Resend returns fewer ids than emails", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_k");
     vi.stubEnv("EMAIL_FROM", "noreply@church.org");
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => Response.json({ messageIds: ["<only-one>"] })),
+      vi.fn(async () => Response.json({ data: [{ id: "only-one" }] })),
     );
-    await expect(
-      sendEmailBatch({
-        subject: "s",
-        html: "h",
-        text: "t",
-        versions: [
-          { to: { email: "a@example.com" }, params: {} },
-          { to: { email: "b@example.com" }, params: {} },
-        ],
-      }),
-    ).rejects.toThrow(/1 message ids for 2/);
+    await expect(sendEmailBatch([message(0), message(1)])).rejects.toThrow(
+      /1 email ids for 2 emails/,
+    );
   });
 });

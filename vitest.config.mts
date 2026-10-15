@@ -27,8 +27,8 @@ export default defineConfig({
           // Needs the Docker database: `docker compose up -d db`.
           globalSetup: ["tests/integration/global-setup.ts"],
           // A separate *_test database so tests never touch dev data.
-          // No BREVO_API_KEY: tests must never send real email.
-          env: { DATABASE_URL: testDatabaseUrl(), BREVO_API_KEY: "" },
+          // No RESEND_API_KEY: tests must never send real email.
+          env: { DATABASE_URL: testDatabaseUrl(), RESEND_API_KEY: "" },
           // Test files share one database; run them one at a time.
           fileParallelism: false,
         },

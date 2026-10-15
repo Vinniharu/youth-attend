@@ -150,7 +150,7 @@ export const notificationsLog = pgTable(
       onDelete: "set null",
     }),
     type: notifType("type").notNull(),
-    /** The email provider's message id (Brevo `messageId`). */
+    /** The email provider's message id (Resend email `id`). */
     providerMessageId: text("provider_message_id"),
     /** pending | sent | failed | skipped */
     status: text("status").notNull().default("pending"),

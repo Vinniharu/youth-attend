@@ -12,7 +12,7 @@ deploy, plus DNS and email verification time.
 - A Linux VPS with **2 GB RAM** or more (Ubuntu 24.04 is fine) and Docker Engine with
   the Compose plugin (`docker compose version` works).
 - A domain or subdomain for the app, e.g. `attendance.yourchurch.org`.
-- A Brevo account (free tier is enough to start) and access to your domain's DNS.
+- A Resend account (free tier is enough to start) and access to your domain's DNS.
 
 ## 2. Point the domain at the server
 
@@ -21,21 +21,19 @@ pointing at the server's IP. Open ports **80** and **443** in the server firewal
 Caddy requests the HTTPS certificate automatically on first start, so DNS must
 already resolve to the server.
 
-## 3. Set up email in Brevo
+## 3. Set up email in Resend
 
-1. **Senders, domains & dedicated IPs → Domains → Add a domain** for the address
-   you'll send from (e.g. `yourchurch.org`).
-2. Add the DNS records Brevo shows you:
-   - **DKIM** (TXT `brevo._domainkey`, or the CNAMEs Brevo lists)
-   - **Brevo code** (TXT for ownership)
-   - **SPF**: include Brevo in your SPF TXT record, e.g.
-     `v=spf1 include:spf.brevo.com ~all` (merge with any existing SPF record; a
-     domain must have only one).
+1. In Resend: **Domains → Add Domain** for the address you'll send from (e.g.
+   `yourchurch.org`).
+2. Add the DNS records Resend shows you. They live on their own names, so they don't
+   touch any email set-up the domain already has:
+   - **DKIM**: TXT on `resend._domainkey`
+   - **SPF / bounces**: an MX and a TXT record on the `send` subdomain
    - **DMARC** if you don't have one: TXT `_dmarc` with
      `v=DMARC1; p=none; rua=mailto:you@yourchurch.org` (tighten to `quarantine` later).
-3. Wait until Brevo shows the domain as **authenticated**, then add a sender such as
-   `noreply@yourchurch.org`.
-4. **SMTP & API → API keys → Generate a new API key.** Keep it for `.env`.
+3. Click **Verify** and wait until the domain shows **Verified**.
+4. **API Keys → Create API Key**, permission **Sending access**, limited to that
+   domain. Keep it for `.env`.
 
 ## 4. Configure the server
 
@@ -53,8 +51,8 @@ Edit `.env`:
 | `DATABASE_URL`                                            | `postgres://church:<DB_PASSWORD>@localhost:5432/attendance` (only used by host-side scripts; containers build their own) |
 | `BETTER_AUTH_SECRET`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET` | each `openssl rand -base64 32`                                                                                           |
 | `DOMAIN`                                                  | `attendance.yourchurch.org`                                                                                              |
-| `BREVO_API_KEY`                                           | the key from step 3                                                                                                      |
-| `EMAIL_FROM`                                              | `"Youth Church <noreply@yourchurch.org>"` (the verified sender)                                                          |
+| `RESEND_API_KEY`                                          | the key from step 3                                                                                                      |
+| `EMAIL_FROM`                                              | `"Youth Church <noreply@yourchurch.org>"` (on the verified domain)                                                       |
 | `ADMIN_ALERT_EMAILS`                                      | leaders who get "needs a follow-up" emails, comma-separated                                                              |
 | `APP_TIMEZONE`                                            | e.g. `Africa/Lagos`                                                                                                      |
 | `DEFAULT_SERVICE_START` / `END`                           | your Sunday check-in window, e.g. `08:00` / `11:30`                                                                      |
@@ -129,7 +127,7 @@ dc up -d --build          # migrations run automatically before the app starts
   never cookies or request bodies). `dc logs caddy` shows HTTPS and access logs.
 - Logs rotate automatically (10 MB × 5 files per service).
 - `GET /api/health` is a good target for an uptime monitor (e.g. UptimeRobot).
-- Email delivery: Brevo's dashboard, and `notifications_log` in the database
+- Email delivery: Resend's **Emails** log, and `notifications_log` in the database
   (`status`, `error`, `provider_message_id`).
 
 ## 10. On-site dry run (before the first real Sunday)
@@ -148,6 +146,6 @@ Do this at church on a weekday, with two or three people on different phones
    scan the photo: it must say the code has expired.
 6. Admin: mark someone present by hand, excuse someone, close the session, then
    **Process absences now**. Confirm the "we missed you" email arrives (check spam;
-   if it lands there, finish Brevo authentication) and that a member with 3 misses
+   if it lands there, check the domain is Verified in Resend) and that a member with 3 misses
    produces a follow-up and a leader email.
 7. Take a backup and restore it into a scratch database (section 7).

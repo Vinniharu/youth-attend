@@ -9,7 +9,7 @@ import { attendanceLogs, notificationsLog, serviceSessions, users } from "@/db/s
 import { AdminFlagAlertEmail } from "@/emails/admin-flag-alert";
 import { MissedYouEmail } from "@/emails/missed-you";
 import { adminAlertEmails, appUrl } from "@/lib/config";
-import { sendEmail, sendEmailBatch } from "@/lib/email";
+import { type EmailMessage, sendEmailBatch } from "@/lib/email";
 import { unsubscribeUrl } from "@/lib/unsubscribe";
 import { firstName } from "@/lib/greeting";
 
@@ -100,52 +100,74 @@ async function mark(
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** "We missed you" emails, one Brevo batch per Sunday. */
+/**
+ * Sends one email per row as Resend batches and records each row's outcome.
+ * `build` runs inside the try, so a rendering error also marks the rows failed.
+ */
+async function sendBatchFor(
+  rows: Claimed[],
+  build: () => Promise<EmailMessage[]>,
+  label: string,
+  summary: SendSummary,
+) {
+  if (rows.length === 0) return;
+  try {
+    const result = await sendEmailBatch(await build());
+    if (result.status === "skipped") {
+      await mark(
+        rows.map((r) => r.id),
+        "skipped",
+        { error: "email not configured (development)" },
+      );
+      summary.skipped += rows.length;
+      return;
+    }
+    // One update per row: each has its own Resend email id.
+    for (const [i, row] of rows.entries()) {
+      await mark([row.id], "sent", { providerMessageId: result.messageIds[i] });
+    }
+    summary.sent += rows.length;
+  } catch (error) {
+    console.error(`[notifications] ${label} batch failed`, error);
+    await mark(
+      rows.map((r) => r.id),
+      "failed",
+      { error: describe(error) },
+    );
+    summary.failed += rows.length;
+  }
+}
+
+/** "We missed you" emails: one batch per Sunday, personalised per member. */
 async function sendMissedYou(rows: Claimed[], summary: SendSummary) {
   const bySession = Map.groupBy(rows, (r) => r.serviceDate ?? "");
   for (const [serviceDate, group] of bySession) {
-    const html = await render(
-      createElement(MissedYouEmail, {
-        firstName: "{{ params.firstName }}",
-        serviceDay: dayLabel(serviceDate),
-        appUrl: appUrl(),
-        unsubscribeUrl: "{{ params.unsubscribeUrl }}",
-      }),
+    const serviceDay = dayLabel(serviceDate);
+    await sendBatchFor(
+      group,
+      () =>
+        Promise.all(
+          group.map(async (r) => {
+            const html = await render(
+              createElement(MissedYouEmail, {
+                firstName: firstName(r.name),
+                serviceDay,
+                appUrl: appUrl(),
+                unsubscribeUrl: unsubscribeUrl(r.userId),
+              }),
+            );
+            return {
+              to: { email: r.email, name: r.name },
+              subject: `We missed you on ${serviceDay}`,
+              html,
+              text: toPlainText(html),
+              tags: ["missed-you"],
+            };
+          }),
+        ),
+      "missed-you",
+      summary,
     );
-    try {
-      const result = await sendEmailBatch({
-        subject: `We missed you on ${dayLabel(serviceDate)}`,
-        html,
-        text: toPlainText(html),
-        tags: ["missed-you"],
-        versions: group.map((r) => ({
-          to: { email: r.email, name: r.name },
-          params: { firstName: firstName(r.name), unsubscribeUrl: unsubscribeUrl(r.userId) },
-        })),
-      });
-      if (result.status === "skipped") {
-        await mark(
-          group.map((r) => r.id),
-          "skipped",
-          { error: "email not configured (development)" },
-        );
-        summary.skipped += group.length;
-        continue;
-      }
-      // One update per row: each has its own Brevo message id.
-      for (const [i, row] of group.entries()) {
-        await mark([row.id], "sent", { providerMessageId: result.messageIds[i] });
-      }
-      summary.sent += group.length;
-    } catch (error) {
-      console.error("[notifications] missed-you batch failed", error);
-      await mark(
-        group.map((r) => r.id),
-        "failed",
-        { error: describe(error) },
-      );
-      summary.failed += group.length;
-    }
   }
 }
 
@@ -160,44 +182,45 @@ async function lastAttended(userId: string): Promise<string | null> {
   return row ? dayLabel(row.serviceDate) : null;
 }
 
-/** "Needs a follow-up" alerts, one email per flagged member to every leader. */
+/** "Needs a follow-up" alerts: one email per flagged member to every leader, in one batch. */
 async function sendFlagAlerts(rows: Claimed[], summary: SendSummary) {
+  if (rows.length === 0) return;
   const leaders = adminAlertEmails();
-  for (const row of rows) {
-    if (leaders.length === 0) {
-      await mark([row.id], "skipped", { error: "ADMIN_ALERT_EMAILS is empty" });
-      summary.skipped += 1;
-      continue;
-    }
-    try {
-      const html = await render(
-        createElement(AdminFlagAlertEmail, {
-          memberName: row.name,
-          streak: row.consecutiveAbsences,
-          lastAttended: await lastAttended(row.userId),
-          followUpUrl: new URL("/admin/follow-ups", appUrl()).toString(),
-        }),
-      );
-      const result = await sendEmail({
-        to: leaders.map((email) => ({ email })),
-        subject: `${row.name} has missed ${row.consecutiveAbsences} Sundays`,
-        html,
-        text: toPlainText(html),
-        tags: ["flag-alert"],
-      });
-      if (result.status === "skipped") {
-        await mark([row.id], "skipped", { error: "email not configured (development)" });
-        summary.skipped += 1;
-      } else {
-        await mark([row.id], "sent", { providerMessageId: result.messageId });
-        summary.sent += 1;
-      }
-    } catch (error) {
-      console.error("[notifications] flag alert failed", error);
-      await mark([row.id], "failed", { error: describe(error) });
-      summary.failed += 1;
-    }
+  if (leaders.length === 0) {
+    await mark(
+      rows.map((r) => r.id),
+      "skipped",
+      { error: "ADMIN_ALERT_EMAILS is empty" },
+    );
+    summary.skipped += rows.length;
+    return;
   }
+  const followUpUrl = new URL("/admin/follow-ups", appUrl()).toString();
+  await sendBatchFor(
+    rows,
+    () =>
+      Promise.all(
+        rows.map(async (row) => {
+          const html = await render(
+            createElement(AdminFlagAlertEmail, {
+              memberName: row.name,
+              streak: row.consecutiveAbsences,
+              lastAttended: await lastAttended(row.userId),
+              followUpUrl,
+            }),
+          );
+          return {
+            to: leaders.map((email) => ({ email })),
+            subject: `${row.name} has missed ${row.consecutiveAbsences} Sundays`,
+            html,
+            text: toPlainText(html),
+            tags: ["flag-alert"],
+          };
+        }),
+      ),
+    "flag alert",
+    summary,
+  );
 }
 
 /** Sends every queued notification. Safe to call any time (the cron job does). */

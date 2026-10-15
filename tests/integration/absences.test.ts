@@ -40,7 +40,7 @@ beforeEach(async () => {
   await truncateAll();
   vi.stubEnv("ABSENCE_FLAG_THRESHOLD", "3");
   vi.stubEnv("ADMIN_ALERT_EMAILS", "pastor@church.org");
-  vi.stubEnv("BREVO_API_KEY", ""); // sending is skipped unless a test stubs Brevo
+  vi.stubEnv("RESEND_API_KEY", ""); // sending is skipped unless a test stubs Resend
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -181,67 +181,68 @@ describe("processAbsences: idempotency", () => {
   it("running twice changes nothing the second time and sends no duplicates", async () => {
     const member = await insertUser({ ...joinedLongAgo, consecutiveAbsences: 2 });
     await closedSunday(1);
-    const brevo = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(String(init.body)) as { messageVersions?: unknown[] };
-      return body.messageVersions
-        ? Response.json({ messageIds: body.messageVersions.map((_, i) => `<batch-${i}>`) })
-        : Response.json({ messageId: "<alert>" });
+    const resend = vi.fn(async (_url: string, init: RequestInit) => {
+      const emails = JSON.parse(String(init.body)) as { tags: { value: string }[] }[];
+      return Response.json({ data: emails.map((e, i) => ({ id: `${e.tags[0]!.value}-${i}` })) });
     });
-    vi.stubEnv("BREVO_API_KEY", "test-key");
+    vi.stubEnv("RESEND_API_KEY", "re_test");
     vi.stubEnv("EMAIL_FROM", "Youth Church <noreply@church.org>");
-    vi.stubGlobal("fetch", brevo);
+    vi.stubGlobal("fetch", resend);
 
     const first = await processAbsences();
     expect(first.emails).toEqual({ sent: 2, failed: 0, skipped: 0 });
     const second = await processAbsences();
     expect(second).toEqual({ sessions: [], emails: { sent: 0, failed: 0, skipped: 0 } });
 
-    expect(brevo).toHaveBeenCalledTimes(2); // one batch + one alert, ever
+    expect(resend).toHaveBeenCalledTimes(2); // one "missed you" batch + one alert batch, ever
     expect((await reload(member.id)).consecutiveAbsences).toBe(3);
     expect(await getDb().select().from(followUps)).toHaveLength(1);
     const rows = await notifications();
     expect(rows.map((r) => r.status)).toEqual(["sent", "sent"]);
-    expect(rows.find((r) => r.type === "single_absence")?.providerMessageId).toBe("<batch-0>");
+    expect(rows.find((r) => r.type === "single_absence")?.providerMessageId).toBe("missed-you-0");
   });
 });
 
 describe("sending", () => {
-  it("batches 'missed you' emails with per-member params and a signed unsubscribe link", async () => {
+  it("batches 'missed you' emails, each personalised with a signed unsubscribe link", async () => {
     const tobi = await insertUser({ ...joinedLongAgo, name: "Tobi Adeyemi" });
     const ada = await insertUser({ ...joinedLongAgo, name: "Ada Okoro" });
     await closedSunday(1);
-    const brevo = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(String(init.body)) as { messageVersions: unknown[] };
-      return Response.json({ messageIds: body.messageVersions.map((_, i) => `<m${i}>`) });
+    const resend = vi.fn(async (_url: string, init: RequestInit) => {
+      const emails = JSON.parse(String(init.body)) as unknown[];
+      return Response.json({ data: emails.map((_, i) => ({ id: `m${i}` })) });
     });
-    vi.stubEnv("BREVO_API_KEY", "test-key");
+    vi.stubEnv("RESEND_API_KEY", "re_test");
     vi.stubEnv("EMAIL_FROM", "noreply@church.org");
-    vi.stubGlobal("fetch", brevo);
+    vi.stubGlobal("fetch", resend);
 
     await processAbsences();
-    expect(brevo).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(String(brevo.mock.calls[0]![1].body)) as {
-      htmlContent: string;
-      messageVersions: { to: { email: string }[]; params: Record<string, string> }[];
-    };
-    expect(body.htmlContent).toContain("{{ params.firstName }}");
-    const byEmail = new Map(body.messageVersions.map((v) => [v.to[0]!.email, v.params]));
-    expect(byEmail.get(tobi.email)).toMatchObject({ firstName: "Tobi" });
-    expect(byEmail.get(ada.email)).toMatchObject({ firstName: "Ada" });
-    expect(byEmail.get(tobi.email)?.unsubscribeUrl).toMatch(
-      new RegExp(`/unsubscribe\\?u=${tobi.id}&s=[A-Za-z0-9_-]{22}$`),
+    expect(resend).toHaveBeenCalledTimes(1);
+    const emails = JSON.parse(String(resend.mock.calls[0]![1].body)) as {
+      to: string[];
+      html: string;
+      text: string;
+    }[];
+    const byEmail = new Map(emails.map((e) => [e.to[0]!, e]));
+    expect(byEmail.get(tobi.email)?.html).toContain("Tobi");
+    expect(byEmail.get(tobi.email)?.html).not.toContain("Ada");
+    expect(byEmail.get(ada.email)?.text).toMatch(/\bAda\b/i); // plain text uppercases headings
+    for (const e of emails) expect(e.html).not.toContain("{{");
+    // The link is HTML-escaped inside href (& becomes &amp;).
+    expect(byEmail.get(tobi.email)?.html).toMatch(
+      new RegExp(`/unsubscribe\\?u=${tobi.id}&(amp;)?s=[A-Za-z0-9_-]{22}"`),
     );
   });
 
   it("records a failure, then retries it on the next run", async () => {
     await insertUser({ ...joinedLongAgo });
     await closedSunday(1);
-    vi.stubEnv("BREVO_API_KEY", "test-key");
+    vi.stubEnv("RESEND_API_KEY", "re_test");
     vi.stubEnv("EMAIL_FROM", "noreply@church.org");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        Response.json({ code: "unauthorized", message: "Key not found" }, { status: 401 }),
+        Response.json({ name: "validation_error", message: "API key is invalid" }, { status: 401 }),
       ),
     );
 
@@ -251,12 +252,12 @@ describe("sending", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => Response.json({ messageIds: ["<retry>"] })),
+      vi.fn(async () => Response.json({ data: [{ id: "retry" }] })),
     );
     expect((await processAbsences()).emails).toEqual({ sent: 1, failed: 0, skipped: 0 });
     expect((await notifications())[0]).toMatchObject({
       status: "sent",
-      providerMessageId: "<retry>",
+      providerMessageId: "retry",
     });
   });
 
@@ -270,11 +271,11 @@ describe("sending", () => {
       .where(eq(notificationsLog.userId, member.id));
     await getDb().update(users).set({ emailNotifications: false }).where(eq(users.id, member.id));
 
-    vi.stubEnv("BREVO_API_KEY", "test-key");
-    const brevo = vi.fn();
-    vi.stubGlobal("fetch", brevo);
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const resend = vi.fn();
+    vi.stubGlobal("fetch", resend);
     expect((await processAbsences()).emails).toEqual({ sent: 0, failed: 0, skipped: 1 });
-    expect(brevo).not.toHaveBeenCalled();
+    expect(resend).not.toHaveBeenCalled();
   });
 });
 
