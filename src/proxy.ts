@@ -23,9 +23,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip Next internals and static metadata files (icons, manifest, robots). Phones
-  // fetch the install icons signed out, so /icons/* must never redirect to /login.
+  // Skip Next internals and static metadata files (icons, manifest, robots, the
+  // service worker). Phones fetch these signed out, so they must never redirect to
+  // /login. /offline is public through PUBLIC_PAGES.
   matcher: [
-    "/((?!_next/static|_next/image|icon|icons/|apple-icon|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|serwist).*)",
+    "/((?!_next/static|_next/image|icon|icons/|apple-icon|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|sw\.js$).*)",
   ],
 };

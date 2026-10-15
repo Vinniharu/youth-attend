@@ -1,0 +1,16 @@
+// The service worker type-checks on its own: WebWorker globals must not leak into
+// the app (and DOM globals must not leak into the worker).
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["esnext", "webworker"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true
+  },
+  "include": ["src/app/sw.ts"]
+}

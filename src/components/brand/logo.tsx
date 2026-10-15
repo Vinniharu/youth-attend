@@ -25,7 +25,10 @@ export function ChurchMark({ size = 36, className, priority }: ChurchMarkProps) 
       height={size}
       sizes={`${size}px`}
       priority={priority}
-      className={cn("shrink-0 rounded-full", className)}
+      // Pin the box: the base `img { max-width: 100%; height: auto }` rule would
+      // otherwise let a flex layout squash the round badge into an oval.
+      style={{ width: size, height: size }}
+      className={cn("max-w-none shrink-0 rounded-full", className)}
     />
   );
 }

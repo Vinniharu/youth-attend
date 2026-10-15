@@ -6,6 +6,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Logo } from "@/components/brand/logo";
 import { PulseLine } from "@/components/brand/pulse-line";
 import { CheckinCard } from "@/components/checkin/checkin-card";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { appTimeZone } from "@/lib/config";
@@ -84,7 +85,10 @@ async function Welcome() {
       </h1>
 
       <div className="grid gap-10 lg:grid-cols-[28rem_1fr] lg:items-center">
-        <CheckinCard initial={status} timeZone={timeZone} />
+        <div className="flex flex-col gap-4">
+          <CheckinCard initial={status} timeZone={timeZone} />
+          <InstallPrompt />
+        </div>
 
         {recent.beats.length > 0 && (
           <div className="space-y-4">

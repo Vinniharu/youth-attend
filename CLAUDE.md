@@ -11,7 +11,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, Brevo email.
 - **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
 - **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
-- **Next: Phase 5 (PWA).**
+- **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
+- **Next: Phase 6 (QR fallback).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -67,6 +68,24 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Shapes shared with the UI live in `src/lib/checkin-types.ts` (client-safe). `src/lib/member-status.ts` serves the member home: `getMemberStatus` (open session + my check-in, else the next session) and `getRecentSundays` (pulse line; excused and pre-joining Sundays left out).
 - UI: `src/components/checkin/checkin-card.tsx`. Auto-runs on load when a session is open and I'm not checked in; on `visibilitychange` it refreshes the status and retries at most every 45 s (protects the rate limit). Requests time out after 20 s. "Scan QR instead" links to `/scan` (placeholder until Phase 6).
 - E2E: `npm run test:e2e` builds and starts the app (`next build && next start`, port 3100; not `next dev`, since Next 16 allows one dev server per project) against a separate `attendance_e2e` database, created, migrated and reset by `tests/e2e/global-setup.ts`. Specs sign in by planting a code (`plantSignInCode`, tied to Better Auth's hashed-OTP format) and posting it to `/api/auth/sign-in/email-otp`; nothing is emailed. Set `E2E_CHANNEL=chrome` to use the installed Chrome instead of downloading Playwright's Chromium.
+
+## PWA
+
+- **Service worker:** source `src/app/sw.ts`; `scripts/build-sw.mjs` runs after `next build` (`npm run build`), computes the precache list from the build output, and bundles it into `public/sw.js` (git-ignored).
+  - Not the Serwist Turbopack route handler: with `cacheComponents` its `force-static` export is rejected, so it would bundle at runtime, which fails in the standalone Docker image.
+- **Caching is deliberately narrow:**
+  - Precache: the CSS, the preloaded latin fonts (`-s.p.` woff2), `public/icons/*`, and `/offline` (revision = build ID); about 250 KB.
+  - Runtime: `/_next/static/*` CacheFirst; `/_next/image` and icons StaleWhileRevalidate.
+  - Navigations: NetworkOnly, falling back to `/offline`.
+  - **Pages and `/api` are never cached** (per-member and time-sensitive).
+- **Registration:** `SerwistProvider` (`@serwist/turbopack/react`) in `src/app/layout.tsx`, production only, `cacheOnNavigation={false}`, `reloadOnOnline={false}` (an app-wide reload would discard half-typed codes and unsaved forms; only `/offline` reloads itself, via `ReloadWhenOnline`). In development `DevServiceWorkerReset` unregisters any worker left by a production run. `/sw.js` is served `no-cache` (`next.config.ts`).
+- **Types:** the worker type-checks on its own (`tsconfig.sw.json`, WebWorker lib) and is excluded from the app `tsconfig.json`; `npm run typecheck` runs both. `public/sw.js` is ignored by ESLint and Prettier.
+- **`src/proxy.ts`:** the matcher skips `/sw.js` (anchored, `sw\.js$`); `/offline` is public via `PUBLIC_PAGES`. The offline page is static, uses a text wordmark (the badge image may not be cached) and works without JS; its "Try again" is a plain `<a>` (a full page load lets the worker decide).
+- **Install prompt:** `src/components/pwa/install-prompt.tsx`, on the member home.
+  - Android/Chrome: holds `beforeinstallprompt` and shows an Install button.
+  - iOS: Share → Add to Home Screen steps.
+  - Hidden when standalone; "Not now" snoozes it for 14 days (localStorage).
+- **Lighthouse 12+ has no PWA category.** The installability check is Chrome's own (`Page.getInstallabilityErrors` over CDP), run from a non-incognito profile.
 
 ## Email (Brevo)
 
@@ -639,8 +658,8 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 5: PWA
 
-- [ ] Manifest and icons, Serwist service worker, caching rules, offline page
-- [ ] Install prompts for Android and iOS
+- [x] Manifest and icons, Serwist service worker, caching rules, offline page
+- [x] Install prompts for Android and iOS
 
 **Done when:** Lighthouse marks the app installable; it installs on both platforms.
 
