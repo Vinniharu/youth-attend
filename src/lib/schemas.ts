@@ -45,3 +45,10 @@ export const updateSessionInput = z
   })
   .refine((u) => u.window || u.status, { message: "Nothing to change" });
 export type UpdateSessionInput = z.infer<typeof updateSessionInput>;
+
+/** A GPS reading from the browser. `accuracy` is the 68% radius in metres. */
+export const checkinInput = pointSchema.extend({
+  // No upper bound: a coarse fix (even an IP-based one) must reach LOW_ACCURACY, not a 400.
+  accuracy: z.number().positive(),
+});
+export type CheckinInput = z.infer<typeof checkinInput>;

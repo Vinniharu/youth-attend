@@ -116,6 +116,10 @@ function createAuth() {
         otpLength: 6,
         expiresIn: OTP_EXPIRES_MINUTES * 60,
         allowedAttempts: 5,
+        // Per IP, per endpoint. The plugin default (3/min) would block a youth group
+        // signing in together on church Wi-Fi (one shared public IP). Guessing stays
+        // impractical: each code allows 5 attempts, then it's locked.
+        rateLimit: { window: 60, max: 20 },
         storeOTP: "hashed",
         // Not awaited, so response time doesn't reveal whether the email is registered.
         sendVerificationOTP: async ({ email, otp, type }) => {

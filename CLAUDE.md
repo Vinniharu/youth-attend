@@ -10,7 +10,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 1 (database layer + Pulse design foundation): done.** Schema, migrations, seed, `lib/geo.ts` with unit + PostGIS integration tests, design tokens, `/styleguide`.
 - **Phase 2 (auth & roles): done.** Better Auth email OTP (no open sign-up), 60-day sliding sessions, `proxy.ts` + data access layer, login page, Brevo email.
 - **Phase 3 (admin geofence & sessions): done.** Map picker at `/admin/geofence`, sessions at `/admin/sessions`, `GET/PUT /api/admin/location`, `GET/POST /api/admin/sessions`, `PATCH /api/admin/sessions/:id`.
-- **Next: Phase 4 (geofence check-in).**
+- **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
+- **Next: Phase 5 (PWA).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -45,6 +46,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Auth tables (`session`, `account`, `verification`) are hand-written in `schema.ts` to match Better Auth 1.7 (the CLI isn't installed). TS keys must stay Better Auth's field names. `verification.id` is `text`: Better Auth writes non-UUID ids there.
 - `BETTER_AUTH_URL` must match the origin the browser uses; extra origins (Docker on `APP_PORT`, Playwright) go in `BETTER_AUTH_TRUSTED_ORIGINS`.
 - Post-login redirects go through `safeRedirectPath()` (`src/lib/safe-redirect.ts`).
+- Better Auth rate limits only in production, per IP (`x-forwarded-for`). Email-OTP endpoints allow 20/min per IP (the default 3/min would block a group on one church Wi-Fi). **Phase 9:** behind Caddy, set `advanced.ipAddress.trustedProxies` so the client IP (not Caddy's) is the key.
 
 ## Geofence & sessions
 
@@ -57,6 +59,14 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Map: `GeofencePicker` loads `geofence-map.tsx` via `next/dynamic` with `ssr: false`. The marker is a `divIcon` (no broken default PNGs); circle colours come from `.geofence-circle` in `globals.css` (SVG attributes can't read CSS variables). Dark mode inverts OSM tiles.
 - Nominatim: search on submit only (its policy forbids as-you-type autocomplete), throttled to 1 request/second, with attribution.
 - Pages under `/admin` still wrap data reads in `<Suspense>`; the layout's `instant = false` doesn't exempt them from Next's dev check.
+
+## Check-in
+
+- Pipeline: `src/lib/checkin.ts` (`checkInWithGeofence`). The route handler does auth (401 → `{ok:false, reason:"UNAUTHENTICATED"}`), the rate limit (5 per member per 5 min, `src/lib/rate-limit.ts`, in-memory), then Zod (`checkinInput`). Expected outcomes are 200 with `ok: false`.
+- Order deliberately differs from the spec list: open session → **already checked in** → accuracy (`maxAccuracyM()`, `MAX_ACCURACY_M`) → distance → insert (`ON CONFLICT DO NOTHING`). A member already counted sees "checked in" even if they reopen the app at home or with weak GPS.
+- Shapes shared with the UI live in `src/lib/checkin-types.ts` (client-safe). `src/lib/member-status.ts` serves the member home: `getMemberStatus` (open session + my check-in, else the next session) and `getRecentSundays` (pulse line; excused and pre-joining Sundays left out).
+- UI: `src/components/checkin/checkin-card.tsx`. Auto-runs on load when a session is open and I'm not checked in; on `visibilitychange` it refreshes the status and retries at most every 45 s (protects the rate limit). Requests time out after 20 s. "Scan QR instead" links to `/scan` (placeholder until Phase 6).
+- E2E: `npm run test:e2e` builds and starts the app (`next build && next start`, port 3100; not `next dev`, since Next 16 allows one dev server per project) against a separate `attendance_e2e` database, created, migrated and reset by `tests/e2e/global-setup.ts`. Specs sign in by planting a code (`plantSignInCode`, tied to Better Auth's hashed-OTP format) and posting it to `/api/auth/sign-in/email-otp`; nothing is emailed. Set `E2E_CHANNEL=chrome` to use the installed Chrome instead of downloading Playwright's Chromium.
 
 ## Email (Brevo)
 
@@ -619,9 +629,9 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 4: Geofence check-in
 
-- [ ] `POST /api/checkin/geofence` per the pipeline
-- [ ] Member home states: requesting location, checking in, ✓ checked in, too far (distance), location denied (instructions), no service now, "Scan QR instead"
-- [ ] Auto-trigger on load and on `visibilitychange`
+- [x] `POST /api/checkin/geofence` per the pipeline
+- [x] Member home states: requesting location, checking in, ✓ checked in, too far (distance), location denied (instructions), no service now, "Scan QR instead"
+- [x] Auto-trigger on load and on `visibilitychange`
 
 **Done when:** Playwright covers all five geolocation scenarios.
 

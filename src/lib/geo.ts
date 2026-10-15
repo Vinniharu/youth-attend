@@ -12,6 +12,8 @@ export type OpenSessionMatch = {
   sessionId: string;
   distanceM: number;
   inside: boolean;
+  /** The session's geofence radius, in metres. */
+  radiusM: number;
 };
 
 /**
@@ -25,9 +27,15 @@ export async function findOpenSessionForPoint(
   now: Date = new Date(),
 ): Promise<OpenSessionMatch | null> {
   const p = pointSql(point);
-  const result = await db.execute<{ id: string; distance_m: number; inside: boolean }>(sql`
+  const result = await db.execute<{
+    id: string;
+    distance_m: number;
+    inside: boolean;
+    radius_m: number;
+  }>(sql`
     SELECT
       s.id,
+      s.radius_m,
       ST_Distance(s.center, ${p}) AS distance_m,
       ST_DWithin(s.center, ${p}, s.radius_m) AS inside
     FROM service_sessions s
@@ -39,7 +47,12 @@ export async function findOpenSessionForPoint(
 
   const row = result.rows[0];
   if (!row) return null;
-  return { sessionId: row.id, distanceM: Number(row.distance_m), inside: row.inside };
+  return {
+    sessionId: row.id,
+    distanceM: Number(row.distance_m),
+    inside: row.inside,
+    radiusM: Number(row.radius_m),
+  };
 }
 
 const EARTH_RADIUS_M = 6_371_008.8;

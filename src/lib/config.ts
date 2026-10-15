@@ -10,3 +10,6 @@ export const defaultServiceWindow = (): { start: string; end: string } => ({
   start: process.env.DEFAULT_SERVICE_START || "08:00",
   end: process.env.DEFAULT_SERVICE_END || "11:30",
 });
+
+/** GPS readings less accurate than this (metres) are rejected with LOW_ACCURACY. */
+export const maxAccuracyM = (): number => Number(process.env.MAX_ACCURACY_M) || 75;

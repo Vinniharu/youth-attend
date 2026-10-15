@@ -4,14 +4,16 @@ import { Suspense } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Logo } from "@/components/brand/logo";
+import { PulseLine } from "@/components/brand/pulse-line";
+import { CheckinCard } from "@/components/checkin/checkin-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusDot } from "@/components/ui/status-dot";
-import { appTimeZone, defaultServiceWindow } from "@/lib/config";
+import { appTimeZone } from "@/lib/config";
 import { requireUser } from "@/lib/dal";
+import { getMemberStatus, getRecentSundays } from "@/lib/member-status";
 import { firstName, greeting } from "@/lib/greeting";
 
-// Member home. Phase 4 replaces the status card with the live check-in screen.
+// Member home: automatic check-in when a service is open, plus recent attendance.
 
 const STEPS = [
   {
@@ -73,7 +75,7 @@ export default function HomePage() {
 async function Welcome() {
   const user = await requireUser();
   const timeZone = appTimeZone();
-  const { start } = defaultServiceWindow();
+  const [status, recent] = await Promise.all([getMemberStatus(user.id), getRecentSundays(user.id)]);
 
   return (
     <section className="space-y-8">
@@ -81,16 +83,22 @@ async function Welcome() {
         {greeting(new Date(), timeZone)}, {firstName(user.name)}
       </h1>
 
-      <div className="max-w-md rounded-[1.75rem] border bg-card p-6 shadow-md">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <StatusDot tone="idle" />
-          No service right now
-        </p>
-        <p className="mt-4 font-heading text-2xl font-semibold tracking-tight">See you on Sunday</p>
-        <p className="mt-1 text-muted-foreground">
-          Check-in opens at <span className="tabular">{start}</span>. Open Pulse when you arrive and
-          you&apos;re counted.
-        </p>
+      <div className="grid gap-10 lg:grid-cols-[28rem_1fr] lg:items-center">
+        <CheckinCard initial={status} timeZone={timeZone} />
+
+        {recent.beats.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="text-xl font-semibold">
+                Your last {recent.beats.length === 1 ? "Sunday" : `${recent.beats.length} Sundays`}
+              </h2>
+              <p className="tabular text-muted-foreground">
+                {recent.attended} of {recent.beats.length}
+              </p>
+            </div>
+            <PulseLine beats={recent.beats} className="text-primary" />
+          </div>
+        )}
       </div>
 
       {user.role === "admin" && (
@@ -106,7 +114,7 @@ function WelcomeSkeleton() {
   return (
     <div className="space-y-8" aria-busy>
       <Skeleton className="h-14 w-3/4 max-w-lg" />
-      <Skeleton className="h-40 w-full max-w-md rounded-[1.75rem]" />
+      <Skeleton className="h-80 w-full max-w-md rounded-[2rem]" />
     </div>
   );
 }
