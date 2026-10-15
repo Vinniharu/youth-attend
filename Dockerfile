@@ -8,19 +8,25 @@ ENV HUSKY=0
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# ---- migrator: one-shot DB migrations (no Next build needed) ----
+# ---- tools: bundle the migrator and scheduler into self-contained files ----
+FROM deps AS tools
+COPY scripts ./scripts
+RUN node scripts/bundle-tools.mjs
+
+# ---- migrator: one-shot DB migrations. One bundled file + the SQL; no node_modules ----
 FROM node:22-alpine AS migrator
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json ./
-COPY scripts/migrate.mjs ./scripts/
+COPY --from=tools /app/.tools/scripts/migrate.mjs ./scripts/migrate.mjs
+COPY --from=tools /app/.tools/scripts/create-admin.mjs ./scripts/create-admin.mjs
 COPY src/db/migrations ./src/db/migrations
 USER node
 CMD ["node", "scripts/migrate.mjs"]
 
 # ---- scheduler: croner jobs that call the app's /api/cron/* routes ----
-FROM migrator AS scheduler
-COPY scripts/scheduler.mjs ./scripts/
+FROM node:22-alpine AS scheduler
+WORKDIR /app
+COPY --from=tools /app/.tools/scripts/scheduler.mjs ./scripts/scheduler.mjs
+USER node
 CMD ["node", "scripts/scheduler.mjs"]
 
 # ---- builder: produce the standalone Next.js server ----

@@ -38,6 +38,8 @@ Design reference: `http://localhost:3000/styleguide` (dev only).
 docker compose up --build
 ```
 
+**Production:** see [`docs/DEPLOY.md`](docs/DEPLOY.md) (Caddy HTTPS, Brevo, backups, first leader, on-site dry run).
+
 ## Scripts
 
 | Script                      | Purpose                                             |

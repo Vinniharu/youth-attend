@@ -1,0 +1,16 @@
+# Production reverse proxy: automatic HTTPS (Let's Encrypt) for {$DOMAIN}.
+# Caddy replaces any client-sent X-Forwarded-For with the real client IP, which is
+# what Better Auth's per-IP rate limits key on.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+	header {
+		-Server
+		# HTTPS only from now on (the app's other security headers come from Next).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	log {
+		output stdout
+		format json
+	}
+}

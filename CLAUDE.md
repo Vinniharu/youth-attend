@@ -15,7 +15,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 6 (QR fallback): done.** Rotating tokens, projector display, `/scan` (camera or phone-camera link), relaxed-location QR check-in, admin manual check-in, session detail page.
 - **Phase 7 (absence engine & emails): done.** `lib/absences.ts`, Brevo batch sending, cron routes + `scheduler` service, unsubscribe page, `/settings`.
 - **Phase 8 (admin dashboard): done.** Overview (follow-ups first, this Sunday live, 12-week trend), `/admin/follow-ups`, `/admin/members` (+ CSV import/export, member detail with history), excusals, member `/history`.
-- **Next: Phase 9 (hardening & production).**
+- **Phase 9 (hardening & production): done in the repo.** CSP + headers, error logging, slim tool images, `docker-compose.prod.yml` with Caddy (HTTPS) and nightly backups (restore tested), `create-admin`, `docs/DEPLOY.md`. **Left for the user:** deploy on their server/domain, Brevo domain verification, and the on-site dry run (`docs/DEPLOY.md` §10).
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -118,6 +118,16 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Members (`src/lib/members.ts`): search (LIKE wildcards escaped), add, edit, deactivate (ends their sessions; admins can't deactivate or demote themselves), history. CSV import (`POST /api/admin/members/import`, raw CSV body, header `name,email[,phone]`, ≤ 2000 rows, existing emails skipped, per-line report) and export (`GET /api/admin/export?type=members|attendance`). `src/lib/csv.ts` guards exports against spreadsheet formulas; import strips that guard so exports re-import.
 - Excusals (`src/lib/excusals.ts`, `POST/DELETE /api/admin/excusals`): not for someone already checked in; locked once processed.
 - The session page's "Not checked in" list includes everyone active (so a first-timer can be marked present); absence counting keeps its joined-before rule.
+
+## Production
+
+- `docker-compose.prod.yml` (with the base file): only Caddy publishes ports (80/443); `db` and `app` are internal. Caddy (`Caddyfile`) gets HTTPS for `$DOMAIN`, sets HSTS, and replaces client `X-Forwarded-For` with the real IP (what Better Auth's per-IP limits read; no `trustedProxies` needed while the app is reachable only through Caddy).
+- Security headers (`next.config.ts`): CSP without nonces (keeps static shells): scripts self + inline + `wasm-unsafe-eval` (QR decoder), connect to self + Nominatim, images self + OSM tiles, media/worker blob, no objects/framing. These headers are computed at **build** time, so anything domain-dependent (HSTS) lives in Caddy.
+- `src/instrumentation.ts` `onRequestError`: one JSON log line per server error (no headers/cookies/bodies).
+- Docker images: `tools` stage bundles `scripts/{migrate,scheduler,create-admin}.mjs` with esbuild (`scripts/bundle-tools.mjs`), so `migrator`/`scheduler` are bare `node:22-alpine` + one file (238 MB vs 1.32 GB).
+- Backups: `scripts/backup.sh` (`now` | `loop` | `restore FILE [DB]`), run by the `backup` service nightly at `BACKUP_HOUR`, keeping `BACKUP_KEEP_DAYS`; dumps in `./backups` (git-ignored).
+- First leader in production: `docker compose … run --rm migrate node scripts/create-admin.mjs "Name" email`. Never seed or reset production.
+- Full guide: `docs/DEPLOY.md` (Brevo SPF/DKIM/DMARC, env, backups, updates, dry run).
 
 ## Email (Brevo)
 
@@ -308,7 +318,7 @@ DOMAIN=attendance.yourdomain.org
 ```
 youth-attendance/
 ├── docker-compose.yml             # dev: db + app + scheduler
-├── docker-compose.prod.yml        # prod overrides + caddy
+├── docker-compose.prod.yml        # prod overrides + caddy + backups
 ├── Dockerfile                     # multi-stage, Next standalone
 ├── Caddyfile
 ├── .env.example
@@ -723,9 +733,9 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 9: Hardening & production
 
-- [ ] Rate limiting, security headers, location purge job
-- [ ] Backups, Caddy HTTPS, Brevo domain verification (SPF, DKIM, DMARC), error logging
-- [ ] Full E2E run and on-site dry run
+- [x] Rate limiting, security headers, location purge job
+- [x] Backups, Caddy HTTPS, Brevo domain verification (SPF, DKIM, DMARC), error logging
+- [x] Full E2E run; [ ] on-site dry run (user, `docs/DEPLOY.md` §10)
 
 **Done when:** Deployed over HTTPS on your domain, a backup restores successfully, and a real Sunday dry run succeeds.
 

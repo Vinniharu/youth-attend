@@ -1,0 +1,79 @@
+# Production overrides. Use together with the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Differences: nothing but Caddy is reachable from outside (80/443), HTTPS on
+# $DOMAIN, health checks, bounded logs, and a nightly database backup.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  db:
+    ports: !reset []
+    restart: always
+    logging: *logging
+
+  migrate:
+    logging: *logging
+
+  app:
+    ports: !reset []
+    restart: always
+    environment:
+      DATABASE_URL: postgres://church:${DB_PASSWORD}@db:5432/attendance
+      BETTER_AUTH_URL: https://${DOMAIN:?set DOMAIN in .env}
+      APP_URL: https://${DOMAIN}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *logging
+
+  scheduler:
+    restart: always
+    logging: *logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  # Nightly pg_dump (custom format) into ./backups, keeping BACKUP_KEEP_DAYS days.
+  backup:
+    image: postgis/postgis:18-3.6
+    restart: always
+    entrypoint: ["sh", "/scripts/backup.sh", "loop"]
+    environment:
+      PGHOST: db
+      PGUSER: church
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: attendance
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      TZ: ${APP_TIMEZONE:-Africa/Lagos}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

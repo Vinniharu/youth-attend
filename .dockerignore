@@ -11,3 +11,4 @@ plan.md
 Dockerfile
 docker-compose*.yml
 *.md
+.tools
