@@ -180,7 +180,7 @@
   --info: #4da3f5;
   --info-foreground: #06213f;
 
-  --chart-1: #4da3f5;
+  --chart-1: #3d93e8; /* dark bars: validated (dataviz) on --card, L in band */
   --chart-2: #0b6bcb;
   --chart-3: #9cc9f7;
   --chart-4: #cfe3f8;

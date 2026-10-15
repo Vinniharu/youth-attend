@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/follow-ups", label: "Follow-ups" },
   { href: "/admin/sessions", label: "Sessions" },
+  { href: "/admin/members", label: "Members" },
   { href: "/admin/geofence", label: "Geofence" },
 ] as const;
 

@@ -67,3 +67,51 @@ export const unsubscribeInput = z.object({
   u: z.uuid(),
   s: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
 });
+
+const memberFields = {
+  name: z.string().trim().min(1, "Enter a name").max(100),
+  email: z.email("Enter a valid email").trim().toLowerCase().max(254),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .regex(/^[+\d][\d\s()-]*$/, "Use digits, spaces and an optional leading +")
+    .or(z.literal(""))
+    .optional(),
+  role: z.enum(["member", "admin"]).default("member"),
+};
+
+/** Adding a member (admins add members; there is no open sign-up). */
+export const newMemberInput = z.object(memberFields);
+export type NewMemberInput = z.infer<typeof newMemberInput>;
+
+/** Editing a member: any subset of the fields, plus deactivation. */
+export const memberChangeInput = z
+  .object({
+    name: memberFields.name.optional(),
+    email: memberFields.email.optional(),
+    phone: memberFields.phone,
+    role: z.enum(["member", "admin"]).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((c) => Object.keys(c).length > 0, { message: "Nothing to change" });
+export type MemberChangeInput = z.infer<typeof memberChangeInput>;
+
+/** Excusing (or un-excusing) a member from one session. */
+export const excusalInput = z.object({
+  sessionId: z.uuid(),
+  userId: z.uuid(),
+  reason: z.string().trim().max(200).optional(),
+});
+
+/** Follow-up changes: notes, assignment, or resolving. */
+export const followUpChangeInput = z
+  .object({
+    id: z.uuid(),
+    notes: z.string().max(2000).nullable().optional(),
+    assignedTo: z.uuid().nullable().optional(),
+    resolve: z.literal(true).optional(),
+  })
+  .refine((c) => c.notes !== undefined || c.assignedTo !== undefined || c.resolve, {
+    message: "Nothing to change",
+  });

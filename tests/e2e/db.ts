@@ -95,3 +95,43 @@ export async function attendanceCount(email: string): Promise<number> {
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+/** Yesterday's service, still open (as if nobody closed it yet): for the admin workflow. */
+export async function createYesterdaysSession(): Promise<string> {
+  const point = `ST_SetSRID(ST_MakePoint(${CHURCH.lng}, ${CHURCH.lat}), 4326)::geography`;
+  const start = Date.now() - 24 * 60 * 60_000;
+  const { rows } = await db().query<{ id: string }>(
+    `INSERT INTO service_sessions (service_date, starts_at, ends_at, center, radius_m, qr_secret, status)
+     VALUES ($1, $2, $3, ${point}, $4, $5, 'open') RETURNING id`,
+    [
+      new Date(start).toISOString().slice(0, 10),
+      new Date(start),
+      new Date(start + 3 * 60 * 60_000),
+      RADIUS_M,
+      randomBytes(32).toString("base64url"),
+    ],
+  );
+  return rows[0]!.id;
+}
+
+/** Gives a member a run of missed Sundays and an earlier join date (test setup). */
+export async function setHistory(email: string, streak: number) {
+  await db().query(
+    "UPDATE users SET consecutive_absences = $2, joined_at = now() - interval '60 days' WHERE email = $1",
+    [email, streak],
+  );
+}
+
+export async function userState(email: string) {
+  const { rows } = await db().query<{
+    consecutive_absences: number;
+    is_flagged: boolean;
+    open_follow_ups: string;
+  }>(
+    `SELECT u.consecutive_absences, u.is_flagged,
+            (SELECT count(*) FROM follow_ups f WHERE f.user_id = u.id AND f.resolved_at IS NULL) AS open_follow_ups
+     FROM users u WHERE u.email = $1`,
+    [email],
+  );
+  return rows[0];
+}

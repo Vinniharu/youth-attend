@@ -105,7 +105,10 @@ async function Welcome() {
                 Your last {recent.beats.length === 1 ? "Sunday" : `${recent.beats.length} Sundays`}
               </h2>
               <p className="tabular text-muted-foreground">
-                {recent.attended} of {recent.beats.length}
+                {recent.attended} of {recent.beats.length}{" "}
+                <Link href="/history" className="ml-2 font-medium text-primary hover:underline">
+                  See all
+                </Link>
               </p>
             </div>
             <PulseLine beats={recent.beats} className="text-primary" />

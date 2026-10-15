@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
 
-import { MarkPresentList } from "@/components/admin/mark-present-list";
+import { MarkPresentList, RemoveExcusalButton } from "@/components/admin/mark-present-list";
 import { ProcessAbsencesButton } from "@/components/admin/process-absences-button";
 import { SessionStatus } from "@/components/admin/session-status";
 import { Button } from "@/components/ui/button";
@@ -139,9 +139,17 @@ async function SessionDetail({ params }: Pick<PageProps<"/admin/sessions/[id]">,
               <h3 className="pt-4 text-lg font-semibold">Excused</h3>
               <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
                 {excused.map((row) => (
-                  <li key={row.userId} className="px-5 py-3">
-                    <p className="font-medium">{row.name}</p>
-                    {row.reason && <p className="text-sm text-muted-foreground">{row.reason}</p>}
+                  <li
+                    key={row.userId}
+                    className="flex items-center justify-between gap-3 px-5 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">{row.name}</p>
+                      {row.reason && <p className="text-sm text-muted-foreground">{row.reason}</p>}
+                    </div>
+                    {live && (
+                      <RemoveExcusalButton sessionId={id} userId={row.userId} name={row.name} />
+                    )}
                   </li>
                 ))}
               </ul>

@@ -14,7 +14,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
 - **Phase 6 (QR fallback): done.** Rotating tokens, projector display, `/scan` (camera or phone-camera link), relaxed-location QR check-in, admin manual check-in, session detail page.
 - **Phase 7 (absence engine & emails): done.** `lib/absences.ts`, Brevo batch sending, cron routes + `scheduler` service, unsubscribe page, `/settings`.
-- **Next: Phase 8 (admin dashboard).**
+- **Phase 8 (admin dashboard): done.** Overview (follow-ups first, this Sunday live, 12-week trend), `/admin/follow-ups`, `/admin/members` (+ CSV import/export, member detail with history), excusals, member `/history`.
+- **Next: Phase 9 (hardening & production).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -108,6 +109,15 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - `scripts/scheduler.mjs` (croner, `APP_TIMEZONE`) calls them; Docker `scheduler` service (Dockerfile `scheduler` stage), `npm run scheduler` locally. Admins can also "Process absences now" on a closed session (`POST /api/admin/sessions/:id/process`).
 - Unsubscribe: `src/lib/unsubscribe.ts` signs `/unsubscribe?u=&s=` (HMAC, `UNSUBSCRIBE_SECRET`). The public page asks for a button press (`POST /api/unsubscribe`) so email link scanners can't unsubscribe people. Members can switch emails back on at `/settings` (`PATCH /api/me/preferences`).
 - Email templates: `src/emails/{login-code,missed-you,admin-flag-alert}.tsx` share `src/emails/theme.tsx`; preview with `npm run email:dev`.
+
+## Admin dashboard
+
+- `/admin` overview: open follow-ups first (longest streak), "this Sunday" (`getThisSunday`: today's or the next session, else the latest; auto-refreshes every 30 s while open), 12-week trend (`getAttendanceTrend`). "Expected" = active members who had joined before the service (today's roster, not a snapshot).
+- Trend chart (`src/components/admin/trend-chart.tsx`): hand-built SVG, single series in `--chart-1` (light `#0B6BCB`, dark `#3D93E8`, both checked with the dataviz validator), hover/focus readout, table view.
+- Follow-ups (`src/lib/follow-ups.ts`): notes, assign to an active admin, resolve. Resolving clears `is_flagged` (not the streak), so a new run of misses can flag them again.
+- Members (`src/lib/members.ts`): search (LIKE wildcards escaped), add, edit, deactivate (ends their sessions; admins can't deactivate or demote themselves), history. CSV import (`POST /api/admin/members/import`, raw CSV body, header `name,email[,phone]`, ≤ 2000 rows, existing emails skipped, per-line report) and export (`GET /api/admin/export?type=members|attendance`). `src/lib/csv.ts` guards exports against spreadsheet formulas; import strips that guard so exports re-import.
+- Excusals (`src/lib/excusals.ts`, `POST/DELETE /api/admin/excusals`): not for someone already checked in; locked once processed.
+- The session page's "Not checked in" list includes everyone active (so a first-timer can be marked present); absence counting keeps its joined-before rule.
 
 ## Email (Brevo)
 
@@ -704,10 +714,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 8: Admin dashboard
 
-- [ ] Follow-up list first (sorted by streak; notes, assign, resolve)
-- [ ] This-Sunday summary with live count; 12-week trend chart
-- [ ] Members page (search, add/edit/deactivate, CSV import/export, history)
-- [ ] Session detail (attendees, absentees, excuse button)
+- [x] Follow-up list first (sorted by streak; notes, assign, resolve)
+- [x] This-Sunday summary with live count; 12-week trend chart
+- [x] Members page (search, add/edit/deactivate, CSV import/export, history)
+- [x] Session detail (attendees, absentees, excuse button)
 
 **Done when:** An admin can run a full Sunday and the follow-up workflow without touching the database.
 

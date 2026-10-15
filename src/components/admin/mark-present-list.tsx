@@ -13,11 +13,13 @@ type Member = { userId: string; name: string; email: string };
 
 type Props = { sessionId: string; members: Member[]; canMark: boolean };
 
-/** Members not checked in yet, with a search box and "Mark present" (manual check-in). */
+/** Members not checked in yet: search, "Mark present" (manual check-in) or "Excuse". */
 export function MarkPresentList({ sessionId, members, canMark }: Props) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [excusing, setExcusing] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
   const [, startTransition] = useTransition();
 
   const q = query.trim().toLowerCase();
@@ -25,19 +27,18 @@ export function MarkPresentList({ sessionId, members, canMark }: Props) {
     ? members.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
     : members;
 
-  const mark = (member: Member) => {
+  const act = (member: Member, url: string, body: Record<string, unknown>, done: string) => {
     setPendingId(member.userId);
     startTransition(async () => {
-      const problem = await sendJson("/api/admin/attendance", "POST", {
-        sessionId,
-        userId: member.userId,
-      });
+      const problem = await sendJson(url, "POST", { sessionId, userId: member.userId, ...body });
       setPendingId(null);
       if (problem) {
         toast.error(problem);
         return;
       }
-      toast.success(`${member.name} is marked present.`);
+      setExcusing(null);
+      setReason("");
+      toast.success(done);
       router.refresh();
     });
   };
@@ -65,25 +66,104 @@ export function MarkPresentList({ sessionId, members, canMark }: Props) {
       ) : (
         <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
           {shown.map((member) => (
-            <li key={member.userId} className="flex items-center justify-between gap-3 px-5 py-3">
-              <div className="min-w-0">
-                <p className="truncate font-medium">{member.name}</p>
-                <p className="truncate text-sm text-muted-foreground">{member.email}</p>
+            <li key={member.userId} className="space-y-3 px-5 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{member.name}</p>
+                  <p className="truncate text-sm text-muted-foreground">{member.email}</p>
+                </div>
+                {canMark && (
+                  <div className="flex shrink-0 gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={pendingId !== null}
+                      onClick={() => setExcusing(excusing === member.userId ? null : member.userId)}
+                    >
+                      Excuse
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pendingId !== null}
+                      onClick={() =>
+                        act(
+                          member,
+                          "/api/admin/attendance",
+                          {},
+                          `${member.name} is marked present.`,
+                        )
+                      }
+                    >
+                      {pendingId === member.userId ? "Saving…" : "Mark present"}
+                    </Button>
+                  </div>
+                )}
               </div>
-              {canMark && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pendingId !== null}
-                  onClick={() => mark(member)}
+              {excusing === member.userId && (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    act(
+                      member,
+                      "/api/admin/excusals",
+                      reason.trim() ? { reason: reason.trim() } : {},
+                      `${member.name} is excused.`,
+                    );
+                  }}
                 >
-                  {pendingId === member.userId ? "Marking…" : "Mark present"}
-                </Button>
+                  <Input
+                    aria-label={`Reason ${member.name} is excused`}
+                    placeholder="Reason (optional), e.g. travelling"
+                    value={reason}
+                    maxLength={200}
+                    onChange={(event) => setReason(event.target.value)}
+                    className="h-9 rounded-lg"
+                  />
+                  <Button type="submit" size="sm" disabled={pendingId !== null}>
+                    Excuse
+                  </Button>
+                </form>
               )}
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** Undo an excusal (session page, "Excused" list). */
+export function RemoveExcusalButton({
+  sessionId,
+  userId,
+  name,
+}: {
+  sessionId: string;
+  userId: string;
+  name: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const problem = await sendJson("/api/admin/excusals", "DELETE", { sessionId, userId });
+          if (problem) {
+            toast.error(problem);
+            return;
+          }
+          toast.success(`${name} is no longer excused.`);
+          router.refresh();
+        })
+      }
+    >
+      Remove
+    </Button>
   );
 }
