@@ -227,12 +227,59 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy          # Caddy gets the certificate by itself
 ```
 
-### 6C. Proxy running in Docker, Apache, or a panel (Coolify, Plesk, cPanel, …)
+### 6C. Caddy running in Docker (e.g. another project's `…-caddy-1` container)
 
-A proxy inside a container can't reach the host's `127.0.0.1:3061`. Tell me which one
-you have and I'll give exact settings. In short, it must forward `attend.getzylo.site`
-to the app, pass the real client IP as a **single** `X-Forwarded-For` value, and not
-buffer responses.
+A proxy inside a container can't reach the host's `127.0.0.1:3061`, so Pulse adds a
+small relay, `pulse-attend-web` (`docker-compose.proxy-network.yml`). It is the only
+Pulse container that joins the proxy's Docker network. The Pulse app and database stay
+on Pulse's own network, so names like `app` or `db` never clash with the other
+project's services. The other project's containers and compose files are not changed;
+its Caddyfile gets one extra site block.
+
+1. **Find the proxy's network and Caddyfile** (read-only; replace `zylo-caddy-1` with
+   your container's name):
+
+   ```bash
+   docker inspect zylo-caddy-1 --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}'
+   docker inspect zylo-caddy-1 --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+   ```
+
+   The first prints the network (e.g. `zylo_default`). In the second, find the line
+   ending `-> /etc/caddy/Caddyfile` (or `-> /etc/caddy`); the left side is the
+   Caddyfile on the server.
+
+2. **Add the relay to Pulse.** In `/opt/pulse-attend/.env`, replace the `COMPOSE_FILE`
+   line and add `PROXY_NETWORK`:
+
+   ```bash
+   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.shared.yml:docker-compose.proxy-network.yml
+   PROXY_NETWORK=zylo_default
+   ```
+
+   Then `docker compose up -d` and check `docker compose ps` shows `pulse-attend-web`
+   running.
+
+3. **Add the site to the proxy's Caddyfile** (path from step 1), keeping a backup.
+   `tee -a` appends in place, which a bind-mounted single file needs:
+
+   ```bash
+   sudo cp /path/to/Caddyfile /path/to/Caddyfile.bak
+   cat /opt/pulse-attend/deploy/caddy/attend.getzylo.site.docker.caddy | sudo tee -a /path/to/Caddyfile
+   docker exec zylo-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+   docker exec zylo-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+   ```
+
+   `reload` is graceful: the other sites keep running, and if the config were invalid
+   Caddy would keep the old one. If `reload` says the admin API is unavailable, use
+   `docker restart zylo-caddy-1` instead (a second or two of downtime for its sites).
+
+To undo: restore the `.bak` Caddyfile and reload, then remove
+`:docker-compose.proxy-network.yml` from `COMPOSE_FILE` and `docker compose up -d
+--remove-orphans`.
+
+For Traefik, nginx-proxy, Apache or a hosting panel, the relay works the same way: the
+proxy must forward `attend.getzylo.site` to `pulse-attend-web:8080`, pass the real
+client IP as a **single** `X-Forwarded-For` value, and not buffer responses.
 
 ---
 

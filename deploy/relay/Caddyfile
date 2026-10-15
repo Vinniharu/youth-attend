@@ -1,0 +1,26 @@
+# Relay between a reverse proxy that runs in Docker (e.g. another project's Caddy)
+# and the Pulse app. Used by docker-compose.proxy-network.yml.
+# Only this container joins the proxy's network, under the unique name
+# "pulse-attend-web", so names like "app" or "db" never clash between projects.
+{
+	admin off
+	auto_https off
+	servers {
+		# Requests arrive from the outer proxy over a private Docker network.
+		# Trusting private ranges lets {client_ip} be the real visitor's address.
+		trusted_proxies static private_ranges
+	}
+}
+
+:8080 {
+	request_body {
+		max_size 2MB
+	}
+	reverse_proxy pulse-attend-app:3000 {
+		# Exactly one value, the real client IP: Better Auth's per-IP sign-in
+		# limits ignore multi-value chains.
+		header_up X-Forwarded-For {client_ip}
+		# Pages stream (React Suspense); pass each chunk straight on.
+		flush_interval -1
+	}
+}

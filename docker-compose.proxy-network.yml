@@ -1,0 +1,41 @@
+# For a server whose reverse proxy itself runs in Docker (e.g. another project's
+# Caddy container holding ports 80/443). Use on top of the shared-server files:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.shared.yml:docker-compose.proxy-network.yml
+#   PROXY_NETWORK=<the proxy container's Docker network, e.g. zylo_default>
+#
+# Adds one small relay, "pulse-attend-web", which is the only Pulse container on the
+# proxy's network. The proxy forwards to pulse-attend-web:8080; the relay forwards to
+# the app by a unique alias. Compose gives every service its plain name ("app", "db")
+# on every network it joins, so attaching the app itself would risk clashing with the
+# other project's services of the same name. The database never joins that network.
+# See docs/DEPLOY-SHARED.md, step 6C.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  app:
+    networks:
+      default:
+        aliases: [pulse-attend-app]
+
+  pulse-attend-web:
+    image: caddy:2.10-alpine
+    restart: always
+    volumes:
+      - ./deploy/relay/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [default, proxy]
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 64m
+    cpus: 0.5
+    logging: *logging
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:?set PROXY_NETWORK in .env (the proxy container's network)}

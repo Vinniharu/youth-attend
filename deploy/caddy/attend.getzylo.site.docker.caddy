@@ -1,0 +1,15 @@
+
+# Pulse (attend.getzylo.site), for a Caddy that runs in Docker. It reaches Pulse
+# through the "pulse-attend-web" relay (docker-compose.proxy-network.yml), which
+# joins this Caddy's network. Caddy fetches the HTTPS certificate itself.
+attend.getzylo.site {
+	encode zstd gzip
+	reverse_proxy pulse-attend-web:8080 {
+		# Pages stream (React Suspense); send each chunk straight away.
+		flush_interval -1
+	}
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+	}
+}
