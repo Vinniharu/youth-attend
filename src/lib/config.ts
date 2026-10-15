@@ -26,3 +26,17 @@ export const qrMaxAccuracyM = (): number =>
 
 /** The public base URL (links in QR codes and emails). */
 export const appUrl = (): string => process.env.APP_URL || "http://localhost:3000";
+
+/** Consecutive absences that flag a member for a pastoral follow-up. */
+export const absenceFlagThreshold = (): number => Number(process.env.ABSENCE_FLAG_THRESHOLD) || 3;
+
+/** Days before check-in coordinates are wiped (the purge job). */
+export const locationRetentionDays = (): number =>
+  Number(process.env.LOCATION_RETENTION_DAYS) || 90;
+
+/** Leaders who receive "flagged member" alerts (comma-separated ADMIN_ALERT_EMAILS). */
+export const adminAlertEmails = (): string[] =>
+  (process.env.ADMIN_ALERT_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);

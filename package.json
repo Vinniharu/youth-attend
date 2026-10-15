@@ -21,7 +21,9 @@
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
     "db:reset": "tsx --env-file=.env scripts/reset.ts",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "scheduler": "node --env-file=.env scripts/scheduler.mjs",
+    "email:dev": "email dev --dir src/emails --port 3040"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.7",

@@ -1,4 +1,4 @@
-# Development stack: db → migrate (one-shot) → app. Phase 7 adds the scheduler; docker-compose.prod.yml (Phase 9) adds Caddy.
+# Development stack: db → migrate (one-shot) → app, plus the scheduler. docker-compose.prod.yml (Phase 9) adds Caddy.
 services:
   db:
     image: postgis/postgis:18-3.6
@@ -43,6 +43,19 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+  # Runs the scheduled jobs (create session, open/close, absences, purge) in APP_TIMEZONE.
+  scheduler:
+    build:
+      context: .
+      target: scheduler
+    restart: unless-stopped
+    environment:
+      APP_INTERNAL_URL: http://app:3000
+      APP_TIMEZONE: ${APP_TIMEZONE:-Africa/Lagos}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+    depends_on:
+      - app
 
 volumes:
   pgdata:

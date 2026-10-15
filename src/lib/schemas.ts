@@ -58,3 +58,12 @@ export const qrCheckinInput = checkinInput.extend({ token: z.string().min(1).max
 
 /** An admin marking a member present. */
 export const manualCheckinInput = z.object({ sessionId: z.uuid(), userId: z.uuid() });
+
+/** Member preferences (PATCH /api/me/preferences). */
+export const preferencesInput = z.object({ emailNotifications: z.boolean() });
+
+/** The signed unsubscribe link's parameters. */
+export const unsubscribeInput = z.object({
+  u: z.uuid(),
+  s: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
+});

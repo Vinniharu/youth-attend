@@ -13,7 +13,8 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - **Phase 4 (geofence check-in): done.** `POST /api/checkin/geofence`, `GET /api/sessions/current`, member home check-in card, Playwright suite (`tests/e2e`).
 - **Phase 5 (PWA): done.** Service worker (`public/sw.js`, built after `next build`), offline page, install prompts (Android button, iPhone steps). Chrome reports no installability errors; manual install on real phones is still to be checked.
 - **Phase 6 (QR fallback): done.** Rotating tokens, projector display, `/scan` (camera or phone-camera link), relaxed-location QR check-in, admin manual check-in, session detail page.
-- **Next: Phase 7 (absence engine & emails).**
+- **Phase 7 (absence engine & emails): done.** `lib/absences.ts`, Brevo batch sending, cron routes + `scheduler` service, unsubscribe page, `/settings`.
+- **Next: Phase 8 (admin dashboard).**
 - **Email provider is Brevo, not Resend** (the user's choice). Everywhere the spec below says Resend, read Brevo.
 - Work one phase per session and stop at the phase's done-when check. Commit after each phase.
 
@@ -99,6 +100,15 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Scanner: `@yudiel/react-qr-scanner`, client-only. Its zxing decoder is **self-hosted** at `public/vendor/zxing_reader-<version>.wasm` (the library otherwise fetches it from a CDN); `tests/unit/zxing-wasm.test.ts` fails if the installed `zxing-wasm` version moves without refreshing that copy.
 - Check-in screens shared by the home card and the scanner live in `src/components/checkin/checkin-views.tsx` (`ViewBody`, `submitCheckin`, `readPosition`).
 
+## Absence engine & jobs
+
+- `processAbsences()` (`src/lib/absences.ts`): each closed, unprocessed session in its own transaction (row-locked), set-based SQL per the spec table; then `sendPendingNotifications()` after commit. Eligible: active `member` role, `joined_at < starts_at`. Processed and cancelled sessions are never touched. A returning flagged member's streak resets but `is_flagged` and the follow-up stay until a leader resolves it (Phase 8).
+- `src/lib/notifications.ts`: claims `pending`/`failed` rows (last 7 days) atomically by setting `sending`, skips members who unsubscribed or left, sends "missed you" as one Brevo `messageVersions` batch per Sunday (template rendered once with `{{ params.firstName }}` / `{{ params.unsubscribeUrl }}`), and one leader alert per flagged member to `ADMIN_ALERT_EMAILS`. Records `provider_message_id`, `status` (sent/failed/skipped) and `error`; failures retry on the next run.
+- Jobs (`src/lib/jobs.ts`): `createUpcomingSession`, `openAndCloseSessions` (never reopens an admin-closed session; closes never-opened past sessions so they get processed), `purgeOldLocations` (nulls `location` and `accuracy_m`). Routes `POST /api/cron/*` require `Authorization: Bearer $CRON_SECRET` (`rejectUnlessCron`, constant-time; 503 if unset).
+- `scripts/scheduler.mjs` (croner, `APP_TIMEZONE`) calls them; Docker `scheduler` service (Dockerfile `scheduler` stage), `npm run scheduler` locally. Admins can also "Process absences now" on a closed session (`POST /api/admin/sessions/:id/process`).
+- Unsubscribe: `src/lib/unsubscribe.ts` signs `/unsubscribe?u=&s=` (HMAC, `UNSUBSCRIBE_SECRET`). The public page asks for a button press (`POST /api/unsubscribe`) so email link scanners can't unsubscribe people. Members can switch emails back on at `/settings` (`PATCH /api/me/preferences`).
+- Email templates: `src/emails/{login-code,missed-you,admin-flag-alert}.tsx` share `src/emails/theme.tsx`; preview with `npm run email:dev`.
+
 ## Email (Brevo)
 
 - `src/lib/email.ts`: `sendEmail()` posts to Brevo's `POST /v3/smtp/email` with plain `fetch` (no SDK). Sender comes from `EMAIL_FROM` (must be a verified Brevo sender).
@@ -148,8 +158,7 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 | `npm run db:generate` / `db:studio` | New migration from schema changes / Drizzle Studio                   |
 | `docker compose up -d db`           | Dev database only (host port `DB_PORT`, loopback-only)               |
 | `docker compose up --build`         | Full stack (host port `APP_PORT`)                                    |
-
-Email and scheduler scripts (`email:dev`, `scheduler`) are added in the phases that create their files.
+| `npm run scheduler` / `email:dev`   | Run the cron scheduler locally / preview email templates             |
 
 ---
 
@@ -686,10 +695,10 @@ Each phase ends with a **done-when** check. Commit after every phase.
 
 ### Phase 7: Absence engine & emails
 
-- [ ] Cron routes + scheduler service
-- [ ] `lib/absences.ts` per the spec, with tests for every branch and for idempotency
-- [ ] React Email templates, Brevo batch sending, `notifications_log`
-- [ ] Signed unsubscribe link and settings page
+- [x] Cron routes + scheduler service
+- [x] `lib/absences.ts` per the spec, with tests for every branch and for idempotency
+- [x] React Email templates, Brevo batch sending, `notifications_log`
+- [x] Signed unsubscribe link and settings page
 
 **Done when:** Running the job twice sends no duplicates; emails render correctly in Brevo.
 

@@ -18,6 +18,11 @@ COPY src/db/migrations ./src/db/migrations
 USER node
 CMD ["node", "scripts/migrate.mjs"]
 
+# ---- scheduler: croner jobs that call the app's /api/cron/* routes ----
+FROM migrator AS scheduler
+COPY scripts/scheduler.mjs ./scripts/
+CMD ["node", "scripts/scheduler.mjs"]
+
 # ---- builder: produce the standalone Next.js server ----
 FROM node:22-alpine AS builder
 WORKDIR /app

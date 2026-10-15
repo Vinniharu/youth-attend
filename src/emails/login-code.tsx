@@ -1,12 +1,6 @@
 import { Body, Container, Head, Heading, Html, Preview, Section, Text } from "react-email";
 
-// Email clients ignore CSS variables and web fonts, so Pulse tokens are inlined here.
-const INK = "#0E1726";
-const MUTED = "#5B6B82";
-const OCEAN = "#0B6BCB";
-const TIDE = "#E6F1FB";
-const PAPER = "#F7F9FC";
-const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+import { FONT, INK, MUTED, OCEAN, PAPER, TIDE } from "./theme";
 
 export type LoginCodeEmailProps = {
   code: string;

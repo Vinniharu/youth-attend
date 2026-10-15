@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { z } from "zod";
 
 import { MarkPresentList } from "@/components/admin/mark-present-list";
+import { ProcessAbsencesButton } from "@/components/admin/process-absences-button";
 import { SessionStatus } from "@/components/admin/session-status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,6 +70,7 @@ async function SessionDetail({ params }: Pick<PageProps<"/admin/sessions/[id]">,
             {zonedTime(session.endsAt, timeZone)}, within {session.radiusM} m
           </p>
         </div>
+        {session.status === "closed" && <ProcessAbsencesButton sessionId={id} />}
         {live && (
           <Button asChild className="h-11 rounded-xl px-4">
             <Link href={`/admin/sessions/${id}/display`}>

@@ -39,7 +39,15 @@ export default function HomePage() {
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 sm:px-8">
       <header className="flex items-center justify-between py-6">
         <Logo />
-        <SignOutButton />
+        <nav className="flex items-center gap-1 text-sm">
+          <Link
+            href="/settings"
+            className="rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Settings
+          </Link>
+          <SignOutButton />
+        </nav>
       </header>
 
       <main className="flex flex-1 flex-col gap-16 pt-4 pb-20 lg:pt-10">
