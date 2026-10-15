@@ -94,7 +94,9 @@ A PWA that records Sunday youth service attendance using server-verified geofenc
 - Colours: Ocean `#0B6BCB` primary; `success` (emerald) **only** for checked-in states; `warning` (amber) sparingly. Use semantic classes (`bg-primary`, `text-muted-foreground`, `bg-success-soft`), never raw hex in components.
 - Type: Bricolage Grotesque for headings (`font-heading`, applied to h1–h3 automatically), Geist for UI. Add `tabular` to numbers and times.
 - Signature motif: `<PulseLine beats={…} />` (attendance as a heartbeat). It's the one expressive element; keep everything around it quiet.
-- Brand: `<Logo />` / `<PulseMark />` in `src/components/brand`; `<StatusDot />` for live states.
+- Brand mark: the **RCCG badge** (the user's church). `<Logo />` = `<ChurchMark />` + the "Pulse" wordmark, in `src/components/brand/logo.tsx`; the app is still called Pulse. Never crop, recolour or stretch the badge. `<StatusDot />` for live states.
+- Icons: master at `src/assets/brand/rccg-logo.png` (not in `public/`). `npm run icons` (`scripts/generate-icons.mjs`, sharp) writes `src/app/favicon.ico`, `src/app/icon.png`, `src/app/apple-icon.png` (opaque white: iOS fills transparency with black) and `public/icons/` (manifest `any` + `maskable` on white, badge inside the 80% safe zone). Commit the outputs.
+- Install metadata: `src/app/manifest.ts` and `appleWebApp` in `src/app/layout.tsx`. `src/proxy.ts` must keep `/icons/`, `/manifest.webmanifest`, `/icon*`, `/apple-icon*` and `/favicon.ico` public (phones fetch them signed out).
 - Avoid: all-caps eyebrow labels, arrows appended to buttons, decorative gradients, identical card grids. Mobile-first (members use phones); left-aligned layouts.
 - Reference page: `/styleguide` (dev only; 404 in production).
 

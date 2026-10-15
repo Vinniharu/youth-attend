@@ -20,7 +20,8 @@
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "db:reset": "tsx --env-file=.env scripts/reset.ts"
+    "db:reset": "tsx --env-file=.env scripts/reset.ts",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.7",
@@ -68,6 +69,7 @@
     "lint-staged": "^16.4.0",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",

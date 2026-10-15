@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { Logo, PulseMark } from "@/components/brand/logo";
+import { ChurchMark, Logo } from "@/components/brand/logo";
 import { PulseLine } from "@/components/brand/pulse-line";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,9 +80,14 @@ export default function StyleguidePage() {
       <Section title="Brand">
         <div className="flex flex-wrap items-center gap-8">
           <Logo />
-          <PulseMark className="size-14" />
-          <PulseMark className="size-10" />
+          <ChurchMark size={72} />
+          <ChurchMark size={48} />
         </div>
+        <p className="text-sm text-muted-foreground">
+          The RCCG badge is the mark. Use it as supplied: never crop, recolour or stretch it, and
+          keep it on calm backgrounds. The favicon and install icons are generated from the same
+          master with <code className="font-mono">npm run icons</code>.
+        </p>
         <PulseLine
           beats={[true, true, false, true, false, false, true, true]}
           className="text-primary"

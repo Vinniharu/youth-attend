@@ -31,6 +31,9 @@ export const metadata: Metadata = {
     template: "%s · Pulse",
   },
   description: "Sunday check-in for youth church. Open the app when you arrive and you're counted.",
+  // iPhone "Add to Home Screen": opens full-screen with this name under the icon
+  // (src/app/apple-icon.png).
+  appleWebApp: { capable: true, title: "Pulse", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

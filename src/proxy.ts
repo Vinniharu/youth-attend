@@ -23,8 +23,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip Next internals and static metadata files (icons, manifest, robots).
+  // Skip Next internals and static metadata files (icons, manifest, robots). Phones
+  // fetch the install icons signed out, so /icons/* must never redirect to /login.
   matcher: [
-    "/((?!_next/static|_next/image|icon|apple-icon|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|serwist).*)",
+    "/((?!_next/static|_next/image|icon|icons/|apple-icon|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|serwist).*)",
   ],
 };
